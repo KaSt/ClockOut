@@ -6,7 +6,6 @@
 #include <locale.h>
 #include <signal.h>
 #include <unistd.h>
-#include <ctype.h>
 #include <json-c/json.h>
 #include <pwd.h>
  
@@ -91,6 +90,11 @@ void draw_centered_text(const char *text, int color_pair, int row_offset) {
     int len = strlen(text);
     int row = screen_rows / 2 + row_offset;
     int col = (screen_cols - len) / 2;
+
+    if (row < 0) row = 0;
+    if (row >= screen_rows) row = screen_rows - 1;
+    if (col < 0) col = 0;
+
     attron(COLOR_PAIR(color_pair));
     mvprintw(row, col, "%s", text);
     attroff(COLOR_PAIR(color_pair));
@@ -125,7 +129,117 @@ void draw_discrete_blocks(int remaining) {
  
     attroff(COLOR_PAIR(1));
 }
- 
+
+void draw_scaled_pattern(const char **pattern, int base_width, int top, int left, int scale) {
+    for (int row = 0; row < 7; row++) {
+        for (int col = 0; col < base_width; col++) {
+            if (pattern[row][col] != ' ') {
+                for (int dy = 0; dy < scale; dy++) {
+                    for (int dx = 0; dx < scale; dx++) {
+                        int target_row = top + row * scale + dy;
+                        int target_col = left + col * scale + dx;
+                        if (target_row < 0 || target_row >= screen_rows) continue;
+                        if (target_col < 0 || target_col >= screen_cols) continue;
+                        mvaddch(target_row, target_col, ACS_BLOCK);
+                    }
+                }
+            }
+        }
+    }
+}
+
+int draw_big_time(int remaining_seconds) {
+    #define DIGIT_HEIGHT 7
+    #define DIGIT_WIDTH 5
+    #define COLON_WIDTH 3
+
+    static const char *digits[10][DIGIT_HEIGHT] = {
+        {" XXX ", "X   X", "X   X", "X   X", "X   X", "X   X", " XXX "},
+        {"  X  ", " XX  ", "  X  ", "  X  ", "  X  ", "  X  ", " XXX "},
+        {" XXX ", "X   X", "    X", "   X ", "  X  ", " X   ", "XXXXX"},
+        {" XXX ", "    X", "    X", " XXX ", "    X", "    X", " XXX "},
+        {"X   X", "X   X", "X   X", "XXXXX", "    X", "    X", "    X"},
+        {"XXXXX", "X    ", "X    ", "XXXX ", "    X", "    X", "XXXX "},
+        {" XXX ", "X    ", "X    ", "XXXX ", "X   X", "X   X", " XXX "},
+        {"XXXXX", "    X", "   X ", "  X  ", "  X  ", "  X  ", "  X  "},
+        {" XXX ", "X   X", "X   X", " XXX ", "X   X", "X   X", " XXX "},
+        {" XXX ", "X   X", "X   X", " XXXX", "    X", "    X", " XXX "}
+    };
+
+    static const char *colon[DIGIT_HEIGHT] = {
+        "   ",
+        " X ",
+        " X ",
+        "   ",
+        " X ",
+        " X ",
+        "   "
+    };
+
+    int hours = remaining_seconds / 3600;
+    int minutes = (remaining_seconds % 3600) / 60;
+    int seconds = remaining_seconds % 60;
+
+    char time_str[16];
+    if (remaining_seconds >= 3600) {
+        if (hours > 99) {
+            snprintf(time_str, sizeof(time_str), "%d:%02d", hours, minutes);
+        } else {
+            snprintf(time_str, sizeof(time_str), "%02d:%02d", hours, minutes);
+        }
+    } else {
+        snprintf(time_str, sizeof(time_str), "%02d:%02d", minutes, seconds);
+    }
+
+    int base_total_width = 0;
+    int len = strlen(time_str);
+    for (int i = 0; i < len; i++) {
+        base_total_width += (time_str[i] == ':') ? COLON_WIDTH : DIGIT_WIDTH;
+        if (i != len - 1) {
+            base_total_width += 1;
+        }
+    }
+
+    int max_scale_w = screen_cols / (base_total_width > 0 ? base_total_width : 1);
+    if (max_scale_w < 1) max_scale_w = 1;
+    int max_scale_h = screen_rows / DIGIT_HEIGHT;
+    if (max_scale_h < 1) max_scale_h = 1;
+    int scale = max_scale_w < max_scale_h ? max_scale_w : max_scale_h;
+
+    int actual_width = base_total_width * scale;
+    int actual_height = DIGIT_HEIGHT * scale;
+    int top = (screen_rows - actual_height) / 2;
+    int left = (screen_cols - actual_width) / 2;
+    if (top < 0) top = 0;
+    if (left < 0) left = 0;
+
+    int color_pair = remaining_seconds <= 60 ? 2 : 1;
+    attron(COLOR_PAIR(color_pair));
+
+    int x = left;
+    for (int i = 0; i < len; i++) {
+        if (time_str[i] == ':') {
+            draw_scaled_pattern(colon, COLON_WIDTH, top, x, scale);
+            x += COLON_WIDTH * scale;
+        } else {
+            int digit = time_str[i] - '0';
+            if (digit >= 0 && digit <= 9) {
+                draw_scaled_pattern(digits[digit], DIGIT_WIDTH, top, x, scale);
+            }
+            x += DIGIT_WIDTH * scale;
+        }
+        if (i != len - 1) {
+            x += scale;
+        }
+    }
+
+    attroff(COLOR_PAIR(color_pair));
+    return actual_height;
+}
+#undef DIGIT_HEIGHT
+#undef DIGIT_WIDTH
+#undef COLON_WIDTH
+
 int main(int argc, char *argv[]) {
     setlocale(LC_ALL, "");
     time_t now = time(NULL);
@@ -158,66 +272,85 @@ int main(int argc, char *argv[]) {
     signal(SIGWINCH, handle_resize);
     initscr();
     noecho();
+    cbreak();
     curs_set(FALSE);
+    keypad(stdscr, TRUE);
     start_color();
     use_default_colors();
     init_pair(1, COLOR_WHITE, -1);
     init_pair(2, COLOR_GREEN, -1);
     getmaxyx(stdscr, screen_rows, screen_cols);
- 
+    timeout(1000);
+
     while (1) {
         time_t current = time(NULL);
         double elapsed = difftime(current, mktime(&start_tm));
-        int remaining = work_minutes + lunch_minutes + break_minutes - (int)(elapsed / 60);
- 
+        int elapsed_seconds = (int)elapsed;
+        int total_minutes = work_minutes + lunch_minutes + break_minutes;
+        int remaining_minutes = total_minutes - (int)(elapsed_seconds / 60);
+        int remaining_seconds = total_minutes * 60 - elapsed_seconds;
+
         clear();
         if (discrete_mode) {
-            draw_discrete_blocks(remaining);
+            draw_discrete_blocks(remaining_minutes);
         } else {
-            if (remaining > 60) {
-                int hrs = remaining / 60;
-                int mins = remaining % 60;
-                char buffer[64];
-                snprintf(buffer, sizeof(buffer), "%02d hours %02d minutes remaining", hrs, mins);
-                draw_centered_text(buffer, 1, 0);
-            } else if (remaining > 1) {
-                char buffer[64];
-                snprintf(buffer, sizeof(buffer), "%d minutes remaining", remaining);
-                draw_centered_text(buffer, 1, 0);
-            } else if (remaining == 1) {
-                int seconds = 60 - (int)(elapsed) % 60;
-                char buffer[64];
-                snprintf(buffer, sizeof(buffer), "%d seconds remaining", seconds);
-                draw_centered_text(buffer, 2, 0);
+            if (remaining_seconds > 0) {
+                int digit_height = draw_big_time(remaining_seconds);
+                if (timebank_enabled) {
+                    char tb_text[64];
+                    snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                    draw_centered_text(tb_text, 2, digit_height / 2 + 2);
+                }
             } else {
                 draw_centered_text("Work time completed!", 2, 0);
+                if (timebank_enabled) {
+                    char tb_text[64];
+                    snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                    draw_centered_text(tb_text, 2, 2);
+                }
             }
         }
- 
-        if (timebank_enabled && !discrete_mode) {
-            char tb_text[64];
-            snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
-            draw_centered_text(tb_text, 2, 2);
-        }
- 
+
         refresh();
-        timeout(1000);
-        char input[16];
-        int ch = getnstr(input, sizeof(input) - 1);
+        int ch = getch();
         if (ch != ERR) {
-            if (strcmp(input, "q") == 0) {
+            if (ch == 'q' || ch == 'Q') {
                 quit_counter++;
                 if (quit_counter >= 2) break;
-            } else if (tolower(input[0]) == 'b' && isdigit(input[1])) {
-                int bmin = atoi(&input[1]);
-                break_minutes += bmin;
+            } else if ((ch == 'd' || ch == 'D') && !discrete_mode) {
+                discrete_mode = 1;
+                quit_counter = 0;
+            } else if (ch == 'b' || ch == 'B') {
+                quit_counter = 0;
+                echo();
+                curs_set(TRUE);
+                timeout(-1);
+                int prompt_row = screen_rows - 2;
+                if (prompt_row < 0) prompt_row = 0;
+                move(prompt_row, 0);
+                clrtoeol();
+                mvprintw(prompt_row, 0, "Break minutes: ");
+                refresh();
+                char buffer[16];
+                if (getnstr(buffer, sizeof(buffer) - 1) != ERR) {
+                    int bmin = atoi(buffer);
+                    if (bmin > 0) {
+                        break_minutes += bmin;
+                    }
+                }
+                move(prompt_row, 0);
+                clrtoeol();
+                refresh();
+                curs_set(FALSE);
+                noecho();
+                timeout(1000);
             } else {
                 quit_counter = 0;
             }
         }
- 
-        if (remaining < 0 && timebank_enabled) {
-            int extra = -remaining;
+
+        if (remaining_minutes < 0 && timebank_enabled) {
+            int extra = -remaining_minutes;
             timebank_value += extra / 60.0;
             save_timebank(timebank_value);
             break;
