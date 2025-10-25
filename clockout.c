@@ -27,8 +27,111 @@ int screen_rows, screen_cols;
 int timebank_enabled = 0;
 int discrete_mode = 0;
 int quit_counter = 0;
+int crypto_mode = 0;
 double timebank_value = 0.0;
 struct tm start_tm;
+
+#define MAX_CRYPTO_LOGS 256
+#define CRYPTO_LOG_WIDTH 160
+
+static char crypto_logs[MAX_CRYPTO_LOGS][CRYPTO_LOG_WIDTH];
+static int crypto_log_head = 0;
+static int crypto_log_size = 0;
+
+static const char *crypto_header[] = {
+    "cgminer version 3.6.6 - Started: [2013-10-30 20:31:03]",
+    "--------------------------------------------------------------------------------",
+    " ST: 2  SS: 0  NB: 1  AW: 1.84Mh/s  LW: 0  GF: 0  RF: 0  WU: 1114.9/m",
+    " Connected to coinotron.com diff 255 with stratum as user Haze.1",
+    " Block: 330632ea508d. Diff: 161K  Started: [20:31:05]  Best share: 4.1K",
+    "",
+    " [P]ool management  [G]PU management  [S]ettings  [D]isplay options  [Q]uit",
+    " GPU 0: 80.0C 2000RPM 1.24Mh/s | A:12495 R:100 HW:0 U:1.11/m"
+};
+
+void reset_crypto_logs() {
+    crypto_log_head = 0;
+    crypto_log_size = 0;
+}
+
+void append_crypto_log(const char *line) {
+    if (crypto_log_size < MAX_CRYPTO_LOGS) {
+        int idx = (crypto_log_head + crypto_log_size) % MAX_CRYPTO_LOGS;
+        strncpy(crypto_logs[idx], line, CRYPTO_LOG_WIDTH - 1);
+        crypto_logs[idx][CRYPTO_LOG_WIDTH - 1] = '\0';
+        crypto_log_size++;
+    } else {
+        strncpy(crypto_logs[crypto_log_head], line, CRYPTO_LOG_WIDTH - 1);
+        crypto_logs[crypto_log_head][CRYPTO_LOG_WIDTH - 1] = '\0';
+        crypto_log_head = (crypto_log_head + 1) % MAX_CRYPTO_LOGS;
+    }
+}
+
+void generate_crypto_log_line(char *buffer, size_t size, int remaining_seconds) {
+    time_t now = time(NULL);
+    struct tm *tm_now = localtime(&now);
+    char timestamp[32];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_now);
+
+    char share[9];
+    for (int i = 0; i < 8; i++) {
+        int v = rand() % 16;
+        share[i] = v < 10 ? '0' + v : 'a' + (v - 10);
+    }
+    share[8] = '\0';
+
+    if (remaining_seconds < 0) {
+        remaining_seconds = 0;
+    }
+
+    int eff_hours = remaining_seconds / 3600;
+    int eff_minutes = (remaining_seconds % 3600) / 60;
+
+    if (rand() % 12 == 0) {
+        int pool = rand() % 3;
+        int diff_whole = 10 + rand() % 500;
+        int diff_frac = rand() % 100;
+        snprintf(buffer, size, "%s Found block for pool %d Diff %d.%02dK BLOCK! Eff: %d.%02dh",
+                 timestamp, pool, diff_whole, diff_frac, eff_hours, eff_minutes);
+    } else {
+        int diff_value = 50 + rand() % 400;
+        int gpu = 1 + rand() % 3;
+        const char *notes[] = {"yay!!!", "nice!", "accepted"};
+        const char *note = notes[rand() % (sizeof(notes) / sizeof(notes[0]))];
+        snprintf(buffer, size, "%s Accepted %s Diff %d GPU %d (%s) Eff: %d.%02dh",
+                 timestamp, share, diff_value, gpu, note, eff_hours, eff_minutes);
+    }
+}
+
+void add_crypto_log_entries(int remaining_seconds) {
+    int lines = 1 + rand() % 3;
+    for (int i = 0; i < lines; i++) {
+        char line[CRYPTO_LOG_WIDTH];
+        generate_crypto_log_line(line, sizeof(line), remaining_seconds);
+        append_crypto_log(line);
+    }
+}
+
+void draw_crypto_screen() {
+    int header_lines = sizeof(crypto_header) / sizeof(crypto_header[0]);
+    int max_rows = screen_rows < header_lines ? screen_rows : header_lines;
+    for (int i = 0; i < max_rows; i++) {
+        mvprintw(i, 0, "%s", crypto_header[i]);
+    }
+
+    if (screen_rows <= header_lines) {
+        return;
+    }
+
+    int available = screen_rows - header_lines;
+    int to_show = crypto_log_size < available ? crypto_log_size : available;
+    int start_offset = crypto_log_size > available ? crypto_log_size - available : 0;
+
+    for (int i = 0; i < to_show; i++) {
+        int idx = (crypto_log_head + start_offset + i) % MAX_CRYPTO_LOGS;
+        mvprintw(header_lines + i, 0, "%s", crypto_logs[idx]);
+    }
+}
  
 void handle_resize(int sig) {
     endwin();
@@ -255,6 +358,8 @@ int main(int argc, char *argv[]) {
     start_tm = *now_tm;
     start_tm.tm_sec = 0;
  
+    srand((unsigned)time(NULL));
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
             printf("ClockOut %s\n", CLOCKOUT_VERSION);
@@ -265,6 +370,8 @@ int main(int argc, char *argv[]) {
             save_timebank(timebank_value);
         } else if (strcmp(argv[i], "--discrete") == 0 || strcmp(argv[i], "-d") == 0) {
             discrete_mode = 1;
+        } else if (strcmp(argv[i], "--cryptomining") == 0 || strcmp(argv[i], "-c") == 0) {
+            crypto_mode = 1;
         } else if (strstr(argv[i], "h") || strstr(argv[i], ":")) {
             parse_time(argv[i], &start_tm);
         } else if (strstr(argv[i], "m")) {
@@ -274,6 +381,10 @@ int main(int argc, char *argv[]) {
             sscanf(argv[i], "%dh", &h);
             work_minutes = h * 60;
         }
+    }
+
+    if (crypto_mode) {
+        reset_crypto_logs();
     }
  
     if (timebank_enabled) {
@@ -302,26 +413,32 @@ int main(int argc, char *argv[]) {
         int remaining_seconds = total_minutes * 60 - elapsed_seconds;
 
         clear();
-        char version_label[64];
-        snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
-        mvprintw(0, 0, "%s", version_label);
 
-        if (discrete_mode) {
-            draw_discrete_blocks(remaining_minutes);
+        if (crypto_mode) {
+            add_crypto_log_entries(remaining_seconds);
+            draw_crypto_screen();
         } else {
-            if (remaining_seconds > 0) {
-                int digit_height = draw_big_time(remaining_seconds);
-                if (timebank_enabled) {
-                    char tb_text[64];
-                    snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
-                    draw_centered_text(tb_text, 2, digit_height / 2 + 2);
-                }
+            char version_label[64];
+            snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
+            mvprintw(0, 0, "%s", version_label);
+
+            if (discrete_mode) {
+                draw_discrete_blocks(remaining_minutes);
             } else {
-                draw_centered_text("Work time completed!", 2, 0);
-                if (timebank_enabled) {
-                    char tb_text[64];
-                    snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
-                    draw_centered_text(tb_text, 2, 2);
+                if (remaining_seconds > 0) {
+                    int digit_height = draw_big_time(remaining_seconds);
+                    if (timebank_enabled) {
+                        char tb_text[64];
+                        snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                        draw_centered_text(tb_text, 2, digit_height / 2 + 2);
+                    }
+                } else {
+                    draw_centered_text("Work time completed!", 2, 0);
+                    if (timebank_enabled) {
+                        char tb_text[64];
+                        snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                        draw_centered_text(tb_text, 2, 2);
+                    }
                 }
             }
         }
@@ -334,6 +451,12 @@ int main(int argc, char *argv[]) {
                 if (quit_counter >= 2) break;
             } else if (ch == 'd' || ch == 'D') {
                 discrete_mode = !discrete_mode;
+                quit_counter = 0;
+            } else if (ch == 'c' || ch == 'C') {
+                crypto_mode = !crypto_mode;
+                if (crypto_mode) {
+                    reset_crypto_logs();
+                }
                 quit_counter = 0;
             } else if (ch == 'b' || ch == 'B') {
                 quit_counter = 0;
@@ -364,7 +487,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (remaining_minutes < 0 && timebank_enabled) {
+        if (!crypto_mode && remaining_minutes < 0 && timebank_enabled) {
             int extra = -remaining_minutes;
             timebank_value += extra / 60.0;
             save_timebank(timebank_value);
