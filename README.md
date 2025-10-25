@@ -82,3 +82,34 @@ Remove the compiled binary and any intermediate files with:
 ```bash
 make clean
 ```
+
+## Packaging
+
+Dockerfiles are provided to build native packages for several Linux
+distributions. Each image compiles ClockOut, assembles the appropriate package
+format, and writes the result to `/dist` inside the container. Invoke them from
+the repository root, overriding the `VERSION` build argument if needed:
+
+```bash
+# Build a Debian package (clockout_VERSION_amd64.deb)
+docker build -f docker/debian/Dockerfile -t clockout-debian .
+
+# Build an RPM for Red Hat compatible systems
+docker build -f docker/redhat/Dockerfile -t clockout-redhat .
+```
+
+Available targets:
+
+| Distro    | Dockerfile path                | Package output                                |
+|-----------|--------------------------------|-----------------------------------------------|
+| Arch      | `docker/arch/Dockerfile`       | `clockout-<version>-1-x86_64.pkg.tar.zst`      |
+| Debian    | `docker/debian/Dockerfile`     | `clockout_<version>_amd64.deb`                 |
+| Alpine    | `docker/alpine/Dockerfile`     | `clockout-<version>-r0.apk`                    |
+| Red Hat   | `docker/redhat/Dockerfile`     | `clockout-<version>-1.el9.x86_64.rpm`          |
+| openSUSE  | `docker/suse/Dockerfile`       | `clockout-<version>-1.x86_64.rpm`              |
+| Slackware | `docker/slackware/Dockerfile`  | `clockout-<version>-x86_64-1_clockout.txz`     |
+| Gentoo    | `docker/gentoo/Dockerfile`     | `clockout-<version>.tbz2`                      |
+| Ubuntu    | `docker/ubuntu/Dockerfile`     | `clockout_<version>_amd64.deb`                 |
+
+Copy the artifact out of the container with `docker create` / `docker cp` or by
+using a multi-stage build tailored to your workflow.
