@@ -12,6 +12,13 @@
 #define DEFAULT_WORK_MINUTES 480
 #define DEFAULT_LUNCH_MINUTES 45
 #define TIMEBANK_FILENAME ".work_timer_timebank.json"
+
+/*
+ * Update this value to bump the application's version. The build system reads
+ * the constant directly when creating release artifacts, so no additional
+ * configuration is necessary.
+ */
+static const char CLOCKOUT_VERSION[] = "0.1.0";
  
 int work_minutes = DEFAULT_WORK_MINUTES;
 int lunch_minutes = DEFAULT_LUNCH_MINUTES;
@@ -248,7 +255,10 @@ int main(int argc, char *argv[]) {
     start_tm.tm_sec = 0;
  
     for (int i = 1; i < argc; i++) {
-        if ((strcmp(argv[i], "--time-bank") == 0 || strcmp(argv[i], "-tb") == 0) && i + 1 < argc) {
+        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-V") == 0) {
+            printf("ClockOut %s\n", CLOCKOUT_VERSION);
+            return 0;
+        } else if ((strcmp(argv[i], "--time-bank") == 0 || strcmp(argv[i], "-tb") == 0) && i + 1 < argc) {
             timebank_enabled = 1;
             timebank_value = atof(argv[++i]);
             save_timebank(timebank_value);
@@ -291,6 +301,10 @@ int main(int argc, char *argv[]) {
         int remaining_seconds = total_minutes * 60 - elapsed_seconds;
 
         clear();
+        char version_label[64];
+        snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
+        mvprintw(0, 0, "%s", version_label);
+
         if (discrete_mode) {
             draw_discrete_blocks(remaining_minutes);
         } else {
