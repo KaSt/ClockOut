@@ -26,7 +26,7 @@ LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
 .PHONY: default clean
 
-default: clockout
+default: deps clockout
 
 clockout: clockout.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
@@ -34,3 +34,6 @@ clockout: clockout.c
 clean:
 	rm -f *.o
 	rm -f clockout
+
+deps:
+	sudo apt install -y libjson-c-dev libncurses-dev
