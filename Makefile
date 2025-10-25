@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -O4
+CFLAGS ?= -O3
 CPPFLAGS ?=
 LDFLAGS ?=
 UNAME_S := $(shell uname -s 2>/dev/null)
@@ -34,7 +34,7 @@ LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
 .PHONY: default clean test release
 
-default: deps clockout
+default: clockout
 
 clockout: clockout.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
