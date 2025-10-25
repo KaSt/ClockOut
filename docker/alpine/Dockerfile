@@ -19,7 +19,7 @@ RUN mkdir -p packages \
     && mkdir -p packaging
 RUN cp -r src/* src-dist/clockout-${VERSION}/
 RUN tar -czf packaging/clockout-${VERSION}.tar.gz -C src-dist clockout-${VERSION}
-RUN cp src/packaging/alpine/APKBUILD packaging/APKBUILD
+RUN sed -e "s/@VERSION@/${VERSION}/g" src/packaging/alpine/APKBUILD > packaging/APKBUILD
 WORKDIR /home/builder/packaging
 RUN abuild-keygen -a -n
 RUN KEY=$(ls /home/builder/.abuild/*.rsa | head -n1) && printf 'PACKAGER="%s"\nPACKAGER_PRIVKEY="%s"\n' "${PACKAGER}" "$KEY" >> /home/builder/.abuild/abuild.conf

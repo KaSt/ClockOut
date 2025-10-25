@@ -1,5 +1,5 @@
 pkgname=clockout
-pkgver=1.0.0
+pkgver=@VERSION@
 pkgrel=1
 pkgdesc="Terminal companion for tracking the rest of your workday"
 arch=('x86_64')

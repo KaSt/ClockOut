@@ -1,5 +1,5 @@
 Name:           clockout
-Version:        1.0.0
+Version:        @VERSION@
 Release:        1%{?dist}
 Summary:        Terminal companion for tracking the rest of your workday
 
@@ -31,5 +31,5 @@ install -Dm644 README.md %{buildroot}/usr/share/doc/%{name}/README.md
 /usr/share/doc/%{name}/README.md
 
 %changelog
-* Thu Jan 01 1970 ClockOut Maintainers <maintainers@example.com> - 1.0.0-1
+* Thu Jan 01 1970 ClockOut Maintainers <maintainers@example.com> - @VERSION@-1
 - Initial package

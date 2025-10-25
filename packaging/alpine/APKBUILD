@@ -1,7 +1,7 @@
 # Contributor: ClockOut Maintainers <maintainers@example.com>
 # Maintainer: ClockOut Maintainers <maintainers@example.com>
 pkgname=clockout
-pkgver=1.0.0
+pkgver=@VERSION@
 pkgrel=0
 pkgdesc="Terminal companion for tracking the rest of your workday"
 url="https://example.com/clockout"

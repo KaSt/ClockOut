@@ -18,7 +18,7 @@ USER build
 RUN mkdir -p /build/pkgbuild /build/sources/clockout-${VERSION}
 RUN cp -r /build/src/* /build/sources/clockout-${VERSION}/
 RUN tar -czf /build/pkgbuild/clockout-${VERSION}.tar.gz -C /build/sources clockout-${VERSION}
-RUN cp /build/src/packaging/arch/PKGBUILD /build/pkgbuild/PKGBUILD
+RUN sed -e "s/@VERSION@/${VERSION}/g" /build/src/packaging/arch/PKGBUILD > /build/pkgbuild/PKGBUILD
 WORKDIR /build/pkgbuild
 RUN makepkg --noconfirm --clean --cleanbuild --noprepare
 RUN mv clockout-*.pkg.tar.zst /dist/
