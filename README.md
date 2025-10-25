@@ -12,8 +12,8 @@ so you can keep an eye on your flex time balance from one session to the next.
   `HH:MMam/pm` formatted timestamps.
 * **Adjustable lunch and break durations** – override the default 45 minute
   lunch and add ad-hoc breaks during the day.
-* **Visual display modes** – choose between a large digital timer or a
-  minimalist discrete block visualization.
+* **Visual display modes** – choose between a large digital timer, discrete
+  blocks, or playful novelty dashboards.
 * **Persistent time bank** – optionally store surplus time in a JSON backed
   ledger in your home directory.
 
@@ -55,12 +55,15 @@ via command-line arguments:
   `~/.work_timer_timebank.json`.
 * `--discrete` / `-d` – Start in discrete block rendering mode instead of the
   large digital timer.
+* `--botnet` / `-b` – Launch the TonkaBotnet BBS dashboard with animated
+  infection tables, strike logs, and process monitors.
 
 ### In-app shortcuts
 
-* Press `b` to add additional break minutes during a session.
+* Press `b` to jump into or out of TonkaBotnet mode.
 * Press `d` to toggle discrete mode while the timer is running.
 * Press `q` twice to quit the program.
+* Press `:` to enter vi-style commands. Record breaks with `break <minutes>`.
 
 ### Examples
 
