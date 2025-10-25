@@ -352,6 +352,19 @@ static void draw_botnet_process_panel(int top, int left, int height, int width, 
     }
 
     botnet_process_counter = (botnet_process_counter + 1) % (prefix_count * suffix_count);
+    mvprintw(top + 2, left, "4211   %s  %s", cpu_buffer, core_task);
+
+    const char *extra_tasks[] = {
+        "relay-mapper", "socket-binder", "drone-orchestrator", "payload-smelter",
+        "mirror-sentinel", "quantum-spider"
+    };
+
+    int rows_available = height - 3;
+    for (int i = 0; i < rows_available && i < (int)(sizeof(extra_tasks) / sizeof(extra_tasks[0])); i++) {
+        double load = (rand() % 900) / 10.0;
+        int pid = 5300 + rand() % 400;
+        mvprintw(top + 3 + i, left, "%4d   %05.1f  %s", pid, load, extra_tasks[i]);
+    }
 }
 
 static void draw_botnet_mode(int remaining_seconds) {
