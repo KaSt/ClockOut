@@ -437,8 +437,6 @@ void draw_maven_mode(int remaining_seconds) {
             mvprintw(row++, 0, "[INFO] %s %s", action, file);
         }
     }
-
-    //draw_footer_instructions();
 }
  
 int parse_time(const char *str, struct tm *tm_out) {
@@ -643,6 +641,9 @@ int main(int argc, char *argv[]) {
             windows_mode = 1;
             discrete_mode = 0;
             maven_mode = 0;
+        } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
+            maven_mode = 1;
+            discrete_mode = 0;
             crypto_mode = 0;
         } else if (strstr(argv[i], "h") || strstr(argv[i], ":")) {
             parse_time(argv[i], &start_tm);
@@ -652,11 +653,6 @@ int main(int argc, char *argv[]) {
             int h;
             sscanf(argv[i], "%dh", &h);
             work_minutes = h * 60;
-            maven_mode = 0;
-        } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
-            maven_mode = 1;
-            discrete_mode = 0;
-            windows_mode = 0;
         } else {
             size_t arg_len = strlen(argv[i]);
             int has_am_pm = 0;
@@ -737,9 +733,18 @@ int main(int argc, char *argv[]) {
         int remaining_minutes = total_minutes - (int)(elapsed_seconds / 60);
         int total_seconds = total_minutes * 60;
         int remaining_seconds = total_seconds - elapsed_seconds;
+        
+        clear();
 
         if (windows_mode) {
             draw_windows_mode(remaining_seconds, total_seconds);
+        } else if (crypto_mode) {
+            add_crypto_log_entries(remaining_seconds);
+            draw_crypto_screen();
+        } else if (maven_mode) {
+            draw_maven_mode(remaining_seconds);
+        } else if (discrete_mode) {
+            draw_discrete_blocks(remaining_minutes);
         } else {
             wbkgd(stdscr, COLOR_PAIR(0));
             clear();
@@ -776,7 +781,6 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 }
-                //draw_footer_instructions();
             }
         }
 
@@ -787,7 +791,7 @@ int main(int argc, char *argv[]) {
                 quit_counter++;
                 if (quit_counter >= 2) break;
             } else if (ch == 'd' || ch == 'D') {
-                discrete_mode = 1;
+                discrete_mode = !discrete_mode;
                 maven_mode = 0;
                 windows_mode = 0;
                 quit_counter = 0;
@@ -795,11 +799,13 @@ int main(int argc, char *argv[]) {
                 discrete_mode = 0;
                 maven_mode = 0;
                 windows_mode = 0;
+                crypto_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'm' || ch == 'M') {
                 maven_mode = 1;
                 discrete_mode = 0;
                 windows_mode = 0;
+                crypto_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'c' || ch == 'C') {
                 crypto_mode = !crypto_mode;
@@ -845,7 +851,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (!crypto_mode && remaining_minutes < 0 && timebank_enabled) {
+        if (remaining_minutes < 0 && timebank_enabled) {
             int extra = -remaining_minutes;
             timebank_value += extra / 60.0;
             save_timebank(timebank_value);
