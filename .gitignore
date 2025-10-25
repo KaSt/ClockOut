@@ -1,3 +1,5 @@
+.vscode/
+
 # Prerequisites
 *.d
 
@@ -56,3 +58,5 @@ dkms.conf
 
 clockout
 test_clockout
+
+
