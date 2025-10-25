@@ -1,0 +1,25 @@
+# Contributor: ClockOut Maintainers <maintainers@example.com>
+# Maintainer: ClockOut Maintainers <maintainers@example.com>
+pkgname=clockout
+pkgver=1.0.0
+pkgrel=0
+pkgdesc="Terminal companion for tracking the rest of your workday"
+url="https://example.com/clockout"
+arch="x86_64"
+license="custom"
+depends="ncurses-libs json-c"
+makedepends="build-base ncurses-dev json-c-dev"
+source="$pkgname-$pkgver.tar.gz"
+options="!check"
+
+build() {
+cd "$builddir"
+make
+}
+
+package() {
+cd "$builddir"
+install -Dm755 clockout "$pkgdir/usr/local/bin/clockout"
+install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}
+sha512sums="SKIP"
