@@ -1,0 +1,26 @@
+require "pathname"
+
+CLOCKOUT_TARBALL = Pathname.new(__dir__).join("clockout-@VERSION@.tar.gz")
+
+class Clockout < Formula
+  desc "Terminal companion for tracking the rest of your workday"
+  homepage "https://example.com/clockout"
+  url "file://#{CLOCKOUT_TARBALL}"
+  version "@VERSION@"
+  sha256 "@SHA256@"
+  license :cannot_represent
+
+  depends_on "json-c"
+  depends_on "ncurses"
+
+  def install
+    system "make", "clean"
+    system "make"
+    bin.install "clockout"
+    doc.install "README.md"
+  end
+
+  test do
+    assert_match "@VERSION@", shell_output("#{bin}/clockout --version")
+  end
+end

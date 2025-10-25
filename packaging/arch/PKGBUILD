@@ -1,0 +1,22 @@
+pkgname=clockout
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="Terminal companion for tracking the rest of your workday"
+arch=('x86_64')
+url='https://example.com/clockout'
+license=('custom')
+depends=('ncurses' 'json-c')
+makedepends=('gcc' 'make')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  make
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+  install -Dm755 clockout "$pkgdir/usr/local/bin/clockout"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

@@ -1,0 +1,29 @@
+PortSystem          1.0
+
+name                clockout
+version             @VERSION@
+categories          deskutils
+maintainers         example.com:maintainers openmaintainer
+license             none
+homepage            https://example.com/clockout
+description         Terminal companion for tracking the rest of your workday
+long_description    ClockOut renders a large countdown timer or discrete blocks to show how much of your scheduled shift remains.
+
+master_sites        file://.
+distname            clockout-${version}
+checksums           sha256  @SHA256@
+
+depends_build       port:pkgconfig
+depends_lib         port:json-c port:ncurses
+
+use_configure       no
+
+build.type          gnu
+build.cmd           make
+build.target
+
+destroot {
+    xinstall -m 755 ${worksrcpath}/clockout ${destroot}${prefix}/bin/clockout
+    xinstall -d ${destroot}${prefix}/share/doc/clockout
+    xinstall -m 644 ${worksrcpath}/README.md ${destroot}${prefix}/share/doc/clockout/README.md
+}

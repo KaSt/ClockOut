@@ -1,0 +1,38 @@
+#!/bin/sh
+
+CWD=$(pwd)
+PRGNAM=clockout
+VERSION=${VERSION:-1.0.0}
+BUILD=${BUILD:-1}
+TAG=${TAG:-_clockout}
+ARCH=${ARCH:-x86_64}
+PKG=$CWD/package
+
+set -e
+
+rm -rf $PKG
+mkdir -p $PKG/usr/local/bin
+mkdir -p $PKG/usr/doc/$PRGNAM-$VERSION
+mkdir -p $PKG/install
+
+make clean
+make
+install -m755 clockout $PKG/usr/local/bin/clockout
+install -m644 README.md $PKG/usr/doc/$PRGNAM-$VERSION/README.md
+
+cat <<SLACKDESC > $PKG/install/slack-desc
+clockout: clockout (terminal companion for tracking the rest of your workday)
+clockout:
+clockout: ClockOut renders a large countdown timer or discrete blocks that show
+clockout: how long remains in your scheduled shift, lunch, and breaks.
+clockout:
+clockout:
+clockout:
+clockout:
+clockout:
+clockout:
+SLACKDESC
+
+mkdir -p $CWD/slackware
+cd $PKG
+/sbin/makepkg -l y -c n $CWD/slackware/$PRGNAM-$VERSION-$ARCH-$BUILD$TAG.txz

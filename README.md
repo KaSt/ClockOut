@@ -82,3 +82,55 @@ Remove the compiled binary and any intermediate files with:
 ```bash
 make clean
 ```
+
+## Packaging
+
+Dockerfiles are provided to build native packages for several Linux
+distributions. Each image compiles ClockOut, assembles the appropriate package
+format, and writes the result to `/dist` inside the container. The Makefile
+exposes convenience targets that wrap the Docker builds and copy the resulting
+artifacts into `dist/` locally:
+
+```bash
+# Build a Debian package (writes dist/clockout_<version>_amd64.deb)
+make debian
+
+# Build an RPM for Red Hat compatible systems
+make redhat
+```
+
+Available targets:
+
+| Make target | Dockerfile path               | Package output                                |
+|-------------|-------------------------------|-----------------------------------------------|
+| `make arch` | `docker/arch/Dockerfile`      | `clockout-<version>-1-x86_64.pkg.tar.zst`      |
+| `make debian` | `docker/debian/Dockerfile`  | `clockout_<version>_amd64.deb`                 |
+| `make alpine` | `docker/alpine/Dockerfile`  | `clockout-<version>-r0.apk`                    |
+| `make redhat` | `docker/redhat/Dockerfile`  | `clockout-<version>-1.el9.x86_64.rpm`          |
+| `make suse` | `docker/suse/Dockerfile`      | `clockout-<version>-1.x86_64.rpm`              |
+| `make slackware` | `docker/slackware/Dockerfile` | `clockout-<version>-x86_64-1_clockout.txz` |
+| `make gentoo` | `docker/gentoo/Dockerfile`  | `clockout-<version>.tbz2`                      |
+| `make ubuntu` | `docker/ubuntu/Dockerfile`  | `clockout_<version>_amd64.deb`                 |
+
+The underlying Docker images accept a `VERSION` build argument (defaulting to
+the version embedded in `clockout.c`). Override it via
+`make debian VERSION=0.2.0` when preparing packages for a new release.
+
+### macOS packaging
+
+The Makefile also generates metadata suitable for Homebrew and MacPorts. Both
+targets snapshot the current source tree, write the archive to `dist/`, and
+render templated packaging definitions with the correct version and checksum.
+
+```bash
+# Produce dist/homebrew/clockout.rb and clockout-<version>.tar.gz
+make homebrew
+
+# Produce dist/macports/Portfile and clockout-<version>.tar.gz
+make macports
+```
+
+To install via Homebrew, copy the contents of `dist/homebrew/` to a machine with
+Homebrew installed and run `brew install ./clockout.rb`. For MacPorts, place the
+files from `dist/macports/` in a local ports tree and run
+`sudo port install clockout`.
