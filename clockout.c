@@ -332,8 +332,8 @@ int main(int argc, char *argv[]) {
             if (ch == 'q' || ch == 'Q') {
                 quit_counter++;
                 if (quit_counter >= 2) break;
-            } else if ((ch == 'd' || ch == 'D') && !discrete_mode) {
-                discrete_mode = 1;
+            } else if (ch == 'd' || ch == 'D') {
+                discrete_mode = !discrete_mode;
                 quit_counter = 0;
             } else if (ch == 'b' || ch == 'B') {
                 quit_counter = 0;
