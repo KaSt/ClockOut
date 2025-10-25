@@ -199,7 +199,7 @@ void draw_maven_mode(int remaining_seconds) {
         }
     }
 
-    draw_footer_instructions();
+    //draw_footer_instructions();
 }
  
 int parse_time(const char *str, struct tm *tm_out) {
@@ -480,7 +480,7 @@ int main(int argc, char *argv[]) {
             draw_maven_mode(remaining_seconds);
         } else if (discrete_mode) {
             draw_discrete_blocks(remaining_minutes);
-            draw_footer_instructions();
+            //draw_footer_instructions();
         } else {
             if (remaining_seconds > 0) {
                 int digit_height = draw_big_time(remaining_seconds);
@@ -497,7 +497,7 @@ int main(int argc, char *argv[]) {
                     draw_centered_text(tb_text, 2, 2);
                 }
             }
-            draw_footer_instructions();
+            //draw_footer_instructions();
         }
 
         refresh();
