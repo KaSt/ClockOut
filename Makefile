@@ -36,6 +36,9 @@ LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
 default: clockout
 
+ci:
+	$(MAKE) deps clockout
+
 clockout: clockout.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
 
@@ -51,7 +54,35 @@ clean:
 	rm -f test_clockout
 
 deps:
-	sudo apt install -y libjson-c-dev libncurses-dev
+	@sh -c '\
+		UNAME_S=$$(uname -s 2>/dev/null); \
+		if [ "$$UNAME_S" = "Linux" ]; then \
+			if command -v apt-get >/dev/null 2>&1; then \
+				sudo apt-get update && sudo apt-get install -y libjson-c-dev libncurses-dev; \
+			elif command -v yum >/dev/null 2>&1; then \
+				sudo yum install -y json-c-devel ncurses-devel; \
+			else \
+				echo "Unsupported Linux package manager. Install libjson-c-dev and libncurses-dev manually."; \
+				exit 1; \
+			fi; \
+		elif [ "$$UNAME_S" = "Darwin" ]; then \
+			if command -v brew >/dev/null 2>&1; then \
+				brew install json-c ncurses; \
+			elif command -v port >/dev/null 2>&1; then \
+				sudo port selfupdate && sudo port install json-c ncurses; \
+			else \
+				echo "Homebrew or MacPorts not found. Please install json-c and ncurses with Homebrew (brew install json-c ncurses) or MacPorts (sudo port install json-c ncurses)."; \
+				exit 1; \
+			fi; \
+		else \
+			echo "Unsupported OS: $$UNAME_S. Please install json-c and ncurses manually."; \
+			exit 1; \
+		fi; \
+		# Run Snyk security scan if available (per project security best practices) \
+		if command -v snyk_code_scan >/dev/null 2>&1; then \
+			echo "Running snyk_code_scan..."; \
+			snyk_code_scan || true; \
+		fi'
 
 release: clockout
 	@if ! command -v gh >/dev/null 2>&1; then \
