@@ -2,7 +2,13 @@ CC ?= gcc
 CFLAGS ?= -O4
 CPPFLAGS ?=
 LDFLAGS ?=
+UNAME_S := $(shell uname -s 2>/dev/null)
+
+ifeq ($(UNAME_S),Darwin)
+LDLIBS ?= -lncurses
+else
 LDLIBS ?= -lncursesw
+endif
 
 VERSION := $(shell sed -n 's/^static const char CLOCKOUT_VERSION\[\] = "\(.*\)";/\1/p' clockout.c)
 
