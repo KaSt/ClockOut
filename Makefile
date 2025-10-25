@@ -4,6 +4,8 @@ CPPFLAGS ?=
 LDFLAGS ?=
 LDLIBS ?= -lncursesw
 
+VERSION := $(shell sed -n 's/^static const char CLOCKOUT_VERSION\[\] = "\(.*\)";/\1/p' clockout.c)
+
 # Prefer pkg-config for locating json-c headers and libraries. If pkg-config
 # is not available, fall back to Homebrew's default installation prefix when
 # available, and finally rely on the system linker search path.
@@ -24,7 +26,7 @@ CPPFLAGS += $(JSON_C_CFLAGS)
 LDFLAGS += $(filter -L%,$(JSON_C_LIBS))
 LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
-.PHONY: default clean test
+.PHONY: default clean test release
 
 default: deps clockout
 
@@ -44,3 +46,37 @@ clean:
 
 deps:
 	sudo apt install -y libjson-c-dev libncurses-dev
+
+release: clockout
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "GitHub CLI (gh) is required for release automation."; \
+		exit 1; \
+	fi
+	@version="$(VERSION)"; \
+	if [ -z "$$version" ]; then \
+		echo "Unable to determine version from clockout.c"; \
+		exit 1; \
+	fi; \
+	tags=$$(git tag --points-at HEAD); \
+	if [ -n "$$tags" ]; then \
+		for tag in $$tags; do \
+			if ! gh release view "$$tag" >/dev/null 2>&1; then \
+				echo "Creating GitHub release for $$tag"; \
+				gh release create "$$tag" clockout --title "ClockOut $$tag" --notes "Automated release for $$tag"; \
+			else \
+				echo "Release $$tag already exists."; \
+			fi; \
+		done; \
+	else \
+		tag="v$$version"; \
+		if ! git rev-parse "$$tag" >/dev/null 2>&1; then \
+			git tag "$$tag"; \
+			echo "Created tag $$tag"; \
+		fi; \
+		if ! gh release view "$$tag" >/dev/null 2>&1; then \
+			echo "Creating GitHub release for $$tag"; \
+			gh release create "$$tag" clockout --title "ClockOut $$tag" --notes "Automated release for $$tag"; \
+		else \
+			echo "Release $$tag already exists."; \
+		fi; \
+	fi
