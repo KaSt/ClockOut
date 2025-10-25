@@ -594,6 +594,7 @@ int main(int argc, char *argv[]) {
         if (crypto_mode) {
             add_crypto_log_entries(remaining_seconds);
             draw_crypto_screen();
+        } else        
         if (maven_mode) {
             draw_maven_mode(remaining_seconds);
         } else if (discrete_mode) {
