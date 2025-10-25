@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <json-c/json.h>
 #include <pwd.h>
+#include <ctype.h>
  
 #define DEFAULT_WORK_MINUTES 480
 #define DEFAULT_LUNCH_MINUTES 45
@@ -26,6 +27,7 @@ int break_minutes = 0;
 int screen_rows, screen_cols;
 int timebank_enabled = 0;
 int discrete_mode = 0;
+int maven_mode = 0;
 int quit_counter = 0;
 int crypto_mode = 0;
 double timebank_value = 0.0;
@@ -153,13 +155,19 @@ void load_timebank() {
     FILE *file = fopen(path, "r");
     if (file) {
         char buffer[256];
-        fread(buffer, 1, sizeof(buffer), file);
+        size_t bytes_read = fread(buffer, 1, sizeof(buffer) - 1, file);
         fclose(file);
-        struct json_object *parsed_json;
-        parsed_json = json_tokener_parse(buffer);
-        struct json_object *tb;
-        if (json_object_object_get_ex(parsed_json, "timebank", &tb)) {
-            timebank_value = json_object_get_double(tb);
+        if (bytes_read == 0) {
+            return;
+        }
+        buffer[bytes_read] = '\0';
+        struct json_object *parsed_json = json_tokener_parse(buffer);
+        if (parsed_json != NULL) {
+            struct json_object *tb;
+            if (json_object_object_get_ex(parsed_json, "timebank", &tb)) {
+                timebank_value = json_object_get_double(tb);
+            }
+            json_object_put(parsed_json);
         }
     }
 }
@@ -173,7 +181,128 @@ void save_timebank(double value) {
         const char *json_str = json_object_to_json_string(tb_json);
         fprintf(file, "%s", json_str);
         fclose(file);
+        json_object_put(tb_json);
     }
+}
+
+#define ARRAY_SIZE(arr) (int)(sizeof(arr) / sizeof((arr)[0]))
+
+void random_maven_file(char *buffer, size_t size) {
+    if (size == 0) return;
+    static const char *folders[] = {
+        "src/main/java",
+        "src/main/resources",
+        "src/test/java",
+        "src/test/resources"
+    };
+    static const char *packages[] = {
+        "com/example/clockout",
+        "org/clockout/app",
+        "io/github/clockout",
+        "net/company/clockout"
+    };
+    static const char *class_names[] = {
+        "ClockOutApplication",
+        "TimeBankService",
+        "BreakTracker",
+        "DisplayManager",
+        "FocusMode",
+        "MavenIntegration"
+    };
+    static const char *resource_files[] = {
+        "application.yml",
+        "banner.txt",
+        "logback.xml",
+        "messages.properties",
+        "schema.sql",
+        "build-info.properties"
+    };
+    static const char *code_extensions[] = {"java", "kt"};
+
+    const char *folder = folders[rand() % ARRAY_SIZE(folders)];
+    if (strstr(folder, "java") != NULL) {
+        const char *pkg = packages[rand() % ARRAY_SIZE(packages)];
+        const char *class_name = class_names[rand() % ARRAY_SIZE(class_names)];
+        const char *ext = code_extensions[rand() % ARRAY_SIZE(code_extensions)];
+        snprintf(buffer, size, "%s/%s/%s.%s", folder, pkg, class_name, ext);
+    } else {
+        const char *resource = resource_files[rand() % ARRAY_SIZE(resource_files)];
+        snprintf(buffer, size, "%s/%s", folder, resource);
+    }
+}
+
+void draw_footer_instructions() {
+    if (screen_rows <= 0) return;
+    int row = screen_rows - 1;
+    move(row, 0);
+    clrtoeol();
+    mvprintw(row, 0, "[s] Standard  [d] Discrete  [m] Maven  [b] Break  [q] Quit");
+}
+
+void draw_maven_mode(int remaining_seconds) {
+    time_t now = time(NULL);
+    struct tm *tm_now = localtime(&now);
+    char version[16];
+    snprintf(version, sizeof(version), "%d.%02d", tm_now->tm_hour, tm_now->tm_min);
+
+    int remaining = remaining_seconds;
+    if (remaining < 0) remaining = 0;
+    int rem_hours = remaining / 3600;
+    int rem_minutes = (remaining % 3600) / 60;
+    char remaining_label[32];
+    snprintf(remaining_label, sizeof(remaining_label), "%02d:%02d", rem_hours, rem_minutes);
+
+    static const char *phases[] = {"clean", "resources", "compile", "test", "package", "install"};
+    static const char *goals[] = {
+        "maven-resources-plugin",
+        "maven-compiler-plugin",
+        "maven-surefire-plugin",
+        "maven-jar-plugin",
+        "maven-install-plugin"
+    };
+    static const char *modules[] = {
+        "clockout-core",
+        "clockout-api",
+        "clockout-cli",
+        "clockout-ui",
+        "clockout-integration",
+        "clockout-database"
+    };
+    static const char *actions[] = {
+        "Compiling",
+        "Processing",
+        "Copying",
+        "Generating",
+        "Analyzing",
+        "Running"
+    };
+
+    int row = 2;
+    mvprintw(row++, 0, "[INFO] Scanning for projects...");
+    mvprintw(row++, 0, "[INFO] Building ClockOut %s", version);
+    mvprintw(row++, 0, "[INFO] Remaining focus time: %s", remaining_label);
+    if (timebank_enabled) {
+        mvprintw(row++, 0, "[INFO] Time bank balance: %.2f h", timebank_value);
+    }
+
+    int lines_remaining = screen_rows - row - 1;
+    if (lines_remaining < 0) lines_remaining = 0;
+
+    for (int i = 0; i < lines_remaining && row < screen_rows - 1; i++) {
+        const char *module = modules[rand() % ARRAY_SIZE(modules)];
+        if (i % 3 == 0) {
+            const char *goal = goals[rand() % ARRAY_SIZE(goals)];
+            const char *phase = phases[rand() % ARRAY_SIZE(phases)];
+            mvprintw(row++, 0, "[INFO] --- %s:%s:%s (%s) @ %s ---", goal, phase, version, module, module);
+        } else {
+            const char *action = actions[rand() % ARRAY_SIZE(actions)];
+            char file[256];
+            random_maven_file(file, sizeof(file));
+            mvprintw(row++, 0, "[INFO] %s %s", action, file);
+        }
+    }
+
+    //draw_footer_instructions();
 }
  
 int parse_time(const char *str, struct tm *tm_out) {
@@ -380,6 +509,54 @@ int main(int argc, char *argv[]) {
             int h;
             sscanf(argv[i], "%dh", &h);
             work_minutes = h * 60;
+            maven_mode = 0;
+        } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
+            maven_mode = 1;
+            discrete_mode = 0;
+        } else {
+            size_t arg_len = strlen(argv[i]);
+            int has_am_pm = 0;
+            if (arg_len >= 2) {
+                char second_last = (char)tolower((unsigned char)argv[i][arg_len - 2]);
+                char last = (char)tolower((unsigned char)argv[i][arg_len - 1]);
+                if ((second_last == 'a' || second_last == 'p') && last == 'm') {
+                    has_am_pm = 1;
+                }
+            }
+
+            if (strchr(argv[i], ':') != NULL ||
+                (strchr(argv[i], 'h') != NULL && arg_len > 0 && argv[i][arg_len - 1] != 'h') ||
+                has_am_pm) {
+                parse_time(argv[i], &start_tm);
+            } else if (arg_len > 1 && argv[i][arg_len - 1] == 'm') {
+                int numeric = 1;
+                for (size_t j = 0; j < arg_len - 1; j++) {
+                    if (!isdigit((unsigned char)argv[i][j])) {
+                        numeric = 0;
+                        break;
+                    }
+                }
+                if (numeric) {
+                    int minutes;
+                    if (sscanf(argv[i], "%d", &minutes) == 1) {
+                        lunch_minutes = minutes;
+                    }
+                }
+            } else if (arg_len > 1 && argv[i][arg_len - 1] == 'h') {
+                int numeric = 1;
+                for (size_t j = 0; j < arg_len - 1; j++) {
+                    if (!isdigit((unsigned char)argv[i][j])) {
+                        numeric = 0;
+                        break;
+                    }
+                }
+                if (numeric) {
+                    int h;
+                    if (sscanf(argv[i], "%d", &h) == 1) {
+                        work_minutes = h * 60;
+                    }
+                }
+            }
         }
     }
 
@@ -417,6 +594,11 @@ int main(int argc, char *argv[]) {
         if (crypto_mode) {
             add_crypto_log_entries(remaining_seconds);
             draw_crypto_screen();
+        if (maven_mode) {
+            draw_maven_mode(remaining_seconds);
+        } else if (discrete_mode) {
+            draw_discrete_blocks(remaining_minutes);
+            //draw_footer_instructions();
         } else {
             char version_label[64];
             snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
@@ -441,6 +623,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
+            //draw_footer_instructions();
         }
 
         refresh();
@@ -450,7 +633,16 @@ int main(int argc, char *argv[]) {
                 quit_counter++;
                 if (quit_counter >= 2) break;
             } else if (ch == 'd' || ch == 'D') {
-                discrete_mode = !discrete_mode;
+                discrete_mode = 1;
+                maven_mode = 0;
+                quit_counter = 0;
+            } else if (ch == 's' || ch == 'S') {
+                discrete_mode = 0;
+                maven_mode = 0;
+                quit_counter = 0;
+            } else if (ch == 'm' || ch == 'M') {
+                maven_mode = 1;
+                discrete_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'c' || ch == 'C') {
                 crypto_mode = !crypto_mode;
