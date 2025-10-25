@@ -9,6 +9,7 @@
 #include <json-c/json.h>
 #include <pwd.h>
 #include <ctype.h>
+#include <stdarg.h>
  
 #define DEFAULT_WORK_MINUTES 480
 #define DEFAULT_LUNCH_MINUTES 45
@@ -31,8 +32,11 @@ int maven_mode = 0;
 int windows_mode = 0;
 int quit_counter = 0;
 int crypto_mode = 0;
+int botnet_mode = 0;
 double timebank_value = 0.0;
 struct tm start_tm;
+
+static char status_message[128] = "";
 
 #define MAX_CRYPTO_LOGS 256
 #define CRYPTO_LOG_WIDTH 160
@@ -51,6 +55,348 @@ static const char *crypto_header[] = {
     " [P]ool management  [G]PU management  [S]ettings  [D]isplay options  [Q]uit",
     " GPU 0: 80.0C 2000RPM 1.24Mh/s | A:12495 R:100 HW:0 U:1.11/m"
 };
+
+typedef struct {
+    const char *country;
+    int infections;
+} BotnetInfection;
+
+#define BOTNET_COUNTRIES 8
+static BotnetInfection botnet_infections[BOTNET_COUNTRIES] = {
+    {"US", 12840},
+    {"DE", 7420},
+    {"IN", 6905},
+    {"BR", 5120},
+    {"JP", 4312},
+    {"FR", 3840},
+    {"CA", 2755},
+    {"ZA", 1980}
+};
+
+#define BOTNET_LOG_CAPACITY 256
+#define BOTNET_LOG_WIDTH 160
+static char botnet_logs[BOTNET_LOG_CAPACITY][BOTNET_LOG_WIDTH];
+static int botnet_log_head = 0;
+static int botnet_log_size = 0;
+
+static const char *botnet_operations[] = {
+    "sweeping cloud nodes",
+    "weaponizing edge caches",
+    "synchronizing drone swarm",
+    "forging credential payload",
+    "deploying Tonka drones",
+    "priming silicon overclock",
+    "binding lattice mesh",
+    "ghosting upstream mirrors"
+};
+
+static const char *botnet_targets[] = {
+    "finance-grid", "municipal-scada", "deepsea-comms", "exonet-relay",
+    "orbital-uplink", "satfarm", "supply-chain", "autonomous-fleet"
+};
+
+static void reset_botnet_state() {
+    const int seed_values[BOTNET_COUNTRIES] = {12840, 7420, 6905, 5120, 4312, 3840, 2755, 1980};
+    for (int i = 0; i < BOTNET_COUNTRIES; i++) {
+        botnet_infections[i].infections = seed_values[i];
+    }
+    botnet_log_head = 0;
+    botnet_log_size = 0;
+}
+
+static void append_botnet_log(const char *line) {
+    if (botnet_log_size < BOTNET_LOG_CAPACITY) {
+        int idx = (botnet_log_head + botnet_log_size) % BOTNET_LOG_CAPACITY;
+        strncpy(botnet_logs[idx], line, BOTNET_LOG_WIDTH - 1);
+        botnet_logs[idx][BOTNET_LOG_WIDTH - 1] = '\0';
+        botnet_log_size++;
+    } else {
+        strncpy(botnet_logs[botnet_log_head], line, BOTNET_LOG_WIDTH - 1);
+        botnet_logs[botnet_log_head][BOTNET_LOG_WIDTH - 1] = '\0';
+        botnet_log_head = (botnet_log_head + 1) % BOTNET_LOG_CAPACITY;
+    }
+}
+
+static void update_botnet_infections() {
+    for (int i = 0; i < BOTNET_COUNTRIES; i++) {
+        int spike = rand() % 250;
+        botnet_infections[i].infections += 20 + spike;
+    }
+}
+
+static void add_botnet_log_entry() {
+    char buffer[BOTNET_LOG_WIDTH];
+    const char *operation = botnet_operations[rand() % (sizeof(botnet_operations) / sizeof(botnet_operations[0]))];
+    const char *target = botnet_targets[rand() % (sizeof(botnet_targets) / sizeof(botnet_targets[0]))];
+
+    int wave = 50 + rand() % 950;
+    int batch = 1 + rand() % 64;
+    snprintf(buffer, sizeof(buffer), "[TonkaBotnet] wave:%03d batch:%02d :: %s -> %s", wave, batch, operation, target);
+    append_botnet_log(buffer);
+}
+
+static int compare_infections_desc(const void *a, const void *b) {
+    const BotnetInfection *ia = *(const BotnetInfection * const *)a;
+    const BotnetInfection *ib = *(const BotnetInfection * const *)b;
+    return ib->infections - ia->infections;
+}
+
+static void initialize_botnet_dashboard() {
+    reset_botnet_state();
+    for (int i = 0; i < 6; i++) {
+        add_botnet_log_entry();
+    }
+}
+
+static void draw_botnet_border() {
+    if (screen_rows < 3 || screen_cols < 2) {
+        return;
+    }
+
+    attron(COLOR_PAIR(7));
+    for (int col = 0; col < screen_cols; col++) {
+        mvaddch(0, col, '=');
+        mvaddch(screen_rows - 2, col, '=');
+    }
+    for (int row = 1; row < screen_rows - 2; row++) {
+        mvaddch(row, 0, '|');
+        mvaddch(row, screen_cols - 1, '|');
+    }
+    mvaddch(0, 0, '+');
+    mvaddch(0, screen_cols - 1, '+');
+    mvaddch(screen_rows - 2, 0, '+');
+    mvaddch(screen_rows - 2, screen_cols - 1, '+');
+    attroff(COLOR_PAIR(7));
+
+    const char *title = "*** TONKABOTNET OPS CENTER ***";
+    int title_col = (screen_cols - (int)strlen(title)) / 2;
+    if (title_col < 2) title_col = 2;
+    attron(COLOR_PAIR(8));
+    mvprintw(0, title_col, "%s", title);
+    attroff(COLOR_PAIR(8));
+}
+
+static void draw_botnet_infection_panel(int top, int left, int height, int width) {
+    attron(COLOR_PAIR(8));
+    mvprintw(top, left, "INFECTED NODES");
+    attroff(COLOR_PAIR(8));
+
+    if (height <= 2) {
+        return;
+    }
+
+    BotnetInfection *sorted[BOTNET_COUNTRIES];
+    for (int i = 0; i < BOTNET_COUNTRIES; i++) {
+        sorted[i] = &botnet_infections[i];
+    }
+    qsort(sorted, BOTNET_COUNTRIES, sizeof(sorted[0]), compare_infections_desc);
+
+    int rows_available = height - 2;
+    if (rows_available > BOTNET_COUNTRIES) {
+        rows_available = BOTNET_COUNTRIES;
+    }
+
+    for (int i = 0; i < rows_available; i++) {
+        int row = top + 1 + i;
+        attron(COLOR_PAIR(9));
+        mvprintw(row, left, "%2s ", sorted[i]->country);
+        attroff(COLOR_PAIR(9));
+        int value_col = left + 4;
+        if (value_col < left + width) {
+            mvprintw(row, value_col, "%7d infections", sorted[i]->infections);
+        }
+    }
+}
+
+static void draw_botnet_logs_panel(int top, int left, int height, int width) {
+    attron(COLOR_PAIR(8));
+    mvprintw(top, left, "COORDINATED STRIKES");
+    attroff(COLOR_PAIR(8));
+
+    int usable = height - 2;
+    if (usable <= 0) return;
+
+    int to_show = botnet_log_size < usable ? botnet_log_size : usable;
+    int start = botnet_log_size - to_show;
+    for (int i = 0; i < to_show; i++) {
+        int idx = (botnet_log_head + start + i) % BOTNET_LOG_CAPACITY;
+        int row = top + 1 + i;
+        mvprintw(row, left, "%-*.*s", width, width, botnet_logs[idx]);
+    }
+}
+
+static void draw_botnet_process_panel(int top, int left, int height, int width, int remaining_seconds) {
+    attron(COLOR_PAIR(8));
+    mvprintw(top, left, "PROCESS GRID");
+    attroff(COLOR_PAIR(8));
+
+    if (height <= 2) {
+        return;
+    }
+
+    const char *headers = "PID    CPU   TASK";
+    mvprintw(top + 1, left, "%s", headers);
+
+    int hours = remaining_seconds / 3600;
+    if (hours < 0) hours = 0;
+    int minutes = (remaining_seconds % 3600) / 60;
+    if (minutes < 0) minutes = 0;
+
+    char cpu_buffer[16];
+    snprintf(cpu_buffer, sizeof(cpu_buffer), "%02d.%02d", hours, minutes);
+
+    const char *core_task = "tonkacore-scheduler";
+    mvprintw(top + 2, left, "4211   %s  %s", cpu_buffer, core_task);
+
+    const char *extra_tasks[] = {
+        "relay-mapper", "socket-binder", "drone-orchestrator", "payload-smelter",
+        "mirror-sentinel", "quantum-spider"
+    };
+
+    int rows_available = height - 3;
+    for (int i = 0; i < rows_available && i < (int)(sizeof(extra_tasks) / sizeof(extra_tasks[0])); i++) {
+        double load = (rand() % 900) / 10.0;
+        int pid = 5300 + rand() % 400;
+        mvprintw(top + 3 + i, left, "%4d   %05.1f  %s", pid, load, extra_tasks[i]);
+    }
+}
+
+static void draw_botnet_mode(int remaining_seconds) {
+    wbkgd(stdscr, COLOR_PAIR(0));
+    draw_botnet_border();
+
+    int inner_top = 1;
+    int inner_left = 2;
+    int inner_height = screen_rows - 4;
+    if (inner_height < 1) return;
+    int inner_width = screen_cols - 4;
+    if (inner_width < 3) return;
+
+    int panel_width = inner_width / 3;
+    int remainder = inner_width - panel_width * 3;
+
+    int infection_width = panel_width;
+    int logs_width = panel_width;
+    int process_width = panel_width + remainder;
+
+    draw_botnet_infection_panel(inner_top, inner_left, inner_height, infection_width);
+    draw_botnet_logs_panel(inner_top, inner_left + infection_width + 1, inner_height, logs_width);
+    draw_botnet_process_panel(inner_top, inner_left + infection_width + logs_width + 2, inner_height, process_width, remaining_seconds);
+
+    if (status_message[0] != '\0') {
+        attron(COLOR_PAIR(9));
+        mvprintw(screen_rows - 1, 2, "%-*s", screen_cols - 4, status_message);
+        attroff(COLOR_PAIR(9));
+    } else {
+        mvprintw(screen_rows - 1, 2, "%-*s", screen_cols - 4, "");
+    }
+}
+
+static void trim_whitespace(char *str) {
+    if (!str) return;
+    char *start = str;
+    while (*start && isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    if (start != str) {
+        memmove(str, start, strlen(start) + 1);
+    }
+
+    size_t len = strlen(str);
+    while (len > 0 && isspace((unsigned char)str[len - 1])) {
+        str[--len] = '\0';
+    }
+}
+
+static void handle_command_prompt() {
+    echo();
+    curs_set(TRUE);
+    timeout(-1);
+
+    int prompt_row = screen_rows - 1;
+    if (prompt_row < 0) prompt_row = 0;
+    move(prompt_row, 0);
+    clrtoeol();
+    mvprintw(prompt_row, 0, ":");
+    refresh();
+
+    char buffer[64];
+    if (getnstr(buffer, sizeof(buffer) - 1) != ERR) {
+        trim_whitespace(buffer);
+        if (buffer[0] != '\0') {
+            char command[64];
+            strncpy(command, buffer, sizeof(command) - 1);
+            command[sizeof(command) - 1] = '\0';
+
+            char *space = strchr(command, ' ');
+            char *argument = NULL;
+            if (space) {
+                *space = '\0';
+                argument = space + 1;
+                trim_whitespace(argument);
+            }
+
+            for (char *p = command; *p; ++p) {
+                *p = (char)tolower((unsigned char)*p);
+            }
+
+            if (strcmp(command, "break") == 0 && argument) {
+                int minutes = atoi(argument);
+                if (minutes > 0) {
+                    break_minutes += minutes;
+                    set_status_message("Recorded %d minute break.", minutes);
+                } else {
+                    set_status_message("Invalid break duration: %s", argument);
+                }
+            } else if (strcmp(command, "break") == 0) {
+                set_status_message("Usage: break <minutes>");
+            } else {
+                set_status_message("Unknown command: %s", buffer);
+            }
+            quit_counter = 0;
+        }
+    }
+
+    move(prompt_row, 0);
+    clrtoeol();
+    refresh();
+
+    curs_set(FALSE);
+    noecho();
+    timeout(1000);
+}
+
+static void draw_status_line() {
+    if (botnet_mode) {
+        return;
+    }
+
+    if (screen_rows <= 0) {
+        return;
+    }
+
+    int row = screen_rows - 1;
+    move(row, 0);
+    clrtoeol();
+    if (status_message[0] != '\0') {
+        attron(COLOR_PAIR(8));
+        mvprintw(row, 1, "%s", status_message);
+        attroff(COLOR_PAIR(8));
+    }
+}
+
+void set_status_message(const char *fmt, ...) {
+    if (!fmt) {
+        status_message[0] = '\0';
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(status_message, sizeof(status_message), fmt, args);
+    va_end(args);
+}
 
 void reset_crypto_logs() {
     crypto_log_head = 0;
@@ -634,16 +980,26 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--discrete") == 0 || strcmp(argv[i], "-d") == 0) {
             discrete_mode = 1;
             windows_mode = 0;
+            botnet_mode = 0;
         } else if (strcmp(argv[i], "--cryptomining") == 0 || strcmp(argv[i], "-c") == 0) {
             crypto_mode = 1;
             windows_mode = 0;
+            botnet_mode = 0;
         } else if (strcmp(argv[i], "--windows") == 0 || strcmp(argv[i], "-w") == 0) {
             windows_mode = 1;
             discrete_mode = 0;
             maven_mode = 0;
+            botnet_mode = 0;
         } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
             maven_mode = 1;
             discrete_mode = 0;
+            crypto_mode = 0;
+            botnet_mode = 0;
+        } else if (strcmp(argv[i], "--botnet") == 0 || strcmp(argv[i], "-b") == 0) {
+            botnet_mode = 1;
+            discrete_mode = 0;
+            maven_mode = 0;
+            windows_mode = 0;
             crypto_mode = 0;
         } else if (strstr(argv[i], "h") || strstr(argv[i], ":")) {
             parse_time(argv[i], &start_tm);
@@ -700,6 +1056,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (botnet_mode) {
+        initialize_botnet_dashboard();
+    }
+
     if (crypto_mode) {
         reset_crypto_logs();
     }
@@ -722,6 +1082,9 @@ int main(int argc, char *argv[]) {
     init_pair(4, COLOR_YELLOW, COLOR_BLUE);
     init_pair(5, COLOR_BLACK, COLOR_WHITE);
     init_pair(6, COLOR_BLACK, COLOR_YELLOW);
+    init_pair(7, COLOR_GREEN, -1);
+    init_pair(8, COLOR_CYAN, -1);
+    init_pair(9, COLOR_MAGENTA, -1);
     getmaxyx(stdscr, screen_rows, screen_cols);
     timeout(1000);
 
@@ -736,7 +1099,11 @@ int main(int argc, char *argv[]) {
         
         clear();
 
-        if (windows_mode) {
+        if (botnet_mode) {
+            update_botnet_infections();
+            add_botnet_log_entry();
+            draw_botnet_mode(remaining_seconds);
+        } else if (windows_mode) {
             draw_windows_mode(remaining_seconds, total_seconds);
         } else if (crypto_mode) {
             add_crypto_log_entries(remaining_seconds);
@@ -784,6 +1151,10 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        if (!botnet_mode) {
+            draw_status_line();
+        }
+
         refresh();
         int ch = getch();
         if (ch != ERR) {
@@ -800,12 +1171,14 @@ int main(int argc, char *argv[]) {
                 maven_mode = 0;
                 windows_mode = 0;
                 crypto_mode = 0;
+                botnet_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'm' || ch == 'M') {
                 maven_mode = 1;
                 discrete_mode = 0;
                 windows_mode = 0;
                 crypto_mode = 0;
+                botnet_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'c' || ch == 'C') {
                 crypto_mode = !crypto_mode;
@@ -815,37 +1188,30 @@ int main(int argc, char *argv[]) {
                 if (crypto_mode) {
                     windows_mode = 0;
                 }
+                if (crypto_mode) {
+                    botnet_mode = 0;
+                }
                 quit_counter = 0;
             } else if (ch == 'w' || ch == 'W') {
                 windows_mode = 1;
                 maven_mode = 0;
                 discrete_mode = 0;
                 crypto_mode = 0;
+                botnet_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'b' || ch == 'B') {
-                quit_counter = 0;
-                echo();
-                curs_set(TRUE);
-                timeout(-1);
-                int prompt_row = screen_rows - 2;
-                if (prompt_row < 0) prompt_row = 0;
-                move(prompt_row, 0);
-                clrtoeol();
-                mvprintw(prompt_row, 0, "Break minutes: ");
-                refresh();
-                char buffer[16];
-                if (getnstr(buffer, sizeof(buffer) - 1) != ERR) {
-                    int bmin = atoi(buffer);
-                    if (bmin > 0) {
-                        break_minutes += bmin;
-                    }
+                botnet_mode = !botnet_mode;
+                if (botnet_mode) {
+                    crypto_mode = 0;
+                    windows_mode = 0;
+                    discrete_mode = 0;
+                    maven_mode = 0;
+                    initialize_botnet_dashboard();
                 }
-                move(prompt_row, 0);
-                clrtoeol();
-                refresh();
-                curs_set(FALSE);
-                noecho();
-                timeout(1000);
+                quit_counter = 0;
+            } else if (ch == ':') {
+                handle_command_prompt();
+                quit_counter = 0;
             } else {
                 quit_counter = 0;
             }
