@@ -28,6 +28,7 @@ int screen_rows, screen_cols;
 int timebank_enabled = 0;
 int discrete_mode = 0;
 int maven_mode = 0;
+int windows_mode = 0;
 int quit_counter = 0;
 int crypto_mode = 0;
 double timebank_value = 0.0;
@@ -239,6 +240,141 @@ void draw_footer_instructions() {
     mvprintw(row, 0, "[s] Standard  [d] Discrete  [m] Maven  [b] Break  [q] Quit");
 }
 
+void draw_windows_mode(int remaining_seconds, int total_seconds) {
+    if (total_seconds <= 0) {
+        total_seconds = 1;
+    }
+    if (remaining_seconds < 0) {
+        remaining_seconds = 0;
+    }
+
+    wbkgd(stdscr, COLOR_PAIR(3));
+    erase();
+
+    int title_left = 2;
+    if (screen_cols > 36) {
+        title_left = (screen_cols - 36) / 2;
+    }
+    if (title_left < 0) title_left = 0;
+    if (title_left >= screen_cols) title_left = screen_cols > 0 ? screen_cols - 1 : 0;
+
+    attron(COLOR_PAIR(4) | A_BOLD);
+    mvprintw(1, title_left, "Windows XP Professional Setup");
+    attroff(COLOR_PAIR(4) | A_BOLD);
+
+    attron(COLOR_PAIR(3));
+    int info_left = 4;
+    if (screen_cols > 70) {
+        info_left = (screen_cols - 70) / 2;
+        if (info_left < 2) info_left = 2;
+    }
+    if (info_left < 0) info_left = 0;
+    if (info_left >= screen_cols) info_left = screen_cols > 0 ? screen_cols - 1 : 0;
+    mvprintw(3, info_left, "Please wait while Setup formats the partition");
+    mvprintw(5, info_left, "   C: Partition1 [New (Raw)]        16370 MB ( 16370 MB free)");
+    mvprintw(6, info_left, "   on 16379 MB Disk 0 at Id 0 on bus 0 on atapi [MBR].");
+
+    int box_width = screen_cols - info_left * 2;
+    if (box_width > 74) box_width = 74;
+    if (box_width < 20) box_width = screen_cols - 4;
+    if (box_width < 16) box_width = screen_cols;
+    int box_left = (screen_cols - box_width) / 2;
+    if (box_left < 0) box_left = 0;
+    int box_top = screen_rows / 2 - 2;
+    if (box_top < 8) box_top = 8;
+    if (box_top + 4 >= screen_rows) {
+        box_top = screen_rows > 5 ? screen_rows - 5 : 0;
+    }
+
+    int hours_left = remaining_seconds / 3600;
+    int minutes_left = (remaining_seconds % 3600) / 60;
+    char status_line[64];
+    snprintf(status_line, sizeof(status_line), "Setup is formatting... %d.%02d", hours_left, minutes_left);
+
+    attron(COLOR_PAIR(3));
+    mvaddch(box_top, box_left, ACS_ULCORNER);
+    mvhline(box_top, box_left + 1, ACS_HLINE, box_width - 2);
+    mvaddch(box_top, box_left + box_width - 1, ACS_URCORNER);
+    for (int i = 1; i < 4; i++) {
+        mvaddch(box_top + i, box_left, ACS_VLINE);
+        mvaddch(box_top + i, box_left + box_width - 1, ACS_VLINE);
+    }
+    mvaddch(box_top + 4, box_left, ACS_LLCORNER);
+    mvhline(box_top + 4, box_left + 1, ACS_HLINE, box_width - 2);
+    mvaddch(box_top + 4, box_left + box_width - 1, ACS_LRCORNER);
+
+    mvprintw(box_top + 1, box_left + 2, "%s", status_line);
+
+    int bar_width = box_width - 4;
+    if (bar_width < 4) bar_width = box_width;
+    int bar_left = box_left + (box_width - bar_width) / 2;
+    int bar_top = box_top + 3;
+
+    double progress_ratio = 1.0 - (double)remaining_seconds / (double)total_seconds;
+    if (progress_ratio < 0.0) progress_ratio = 0.0;
+    if (progress_ratio > 1.0) progress_ratio = 1.0;
+    int filled = (int)(progress_ratio * bar_width + 0.5);
+    if (filled > bar_width) filled = bar_width;
+    if (filled < 0) filled = 0;
+
+    attron(COLOR_PAIR(5));
+    for (int i = 0; i < bar_width; i++) {
+        mvaddch(bar_top, bar_left + i, ' ');
+    }
+    attroff(COLOR_PAIR(5));
+
+    attron(COLOR_PAIR(6));
+    for (int i = 0; i < filled; i++) {
+        mvaddch(bar_top, bar_left + i, ' ');
+    }
+    attroff(COLOR_PAIR(6));
+
+    if (remaining_seconds <= 0) {
+        int dialog_width = 24;
+        int dialog_height = 5;
+        if (dialog_width > screen_cols - 4) dialog_width = screen_cols - 4;
+        if (dialog_width < 16) dialog_width = screen_cols - 2;
+        if (dialog_width < 10) dialog_width = screen_cols;
+        if (dialog_height > screen_rows - 4) dialog_height = screen_rows - 4;
+        if (dialog_height < 3) dialog_height = screen_rows;
+        int dialog_left = (screen_cols - dialog_width) / 2;
+        if (dialog_left < 0) dialog_left = 0;
+        int dialog_top = box_top;
+        if (dialog_top + dialog_height >= screen_rows) {
+            dialog_top = screen_rows > dialog_height ? screen_rows - dialog_height : 0;
+        }
+
+        attron(COLOR_PAIR(5));
+        for (int r = 0; r < dialog_height; r++) {
+            for (int c = 0; c < dialog_width; c++) {
+                mvaddch(dialog_top + r, dialog_left + c, ' ');
+            }
+        }
+        attroff(COLOR_PAIR(5));
+
+        attron(COLOR_PAIR(3));
+        mvaddch(dialog_top, dialog_left, ACS_ULCORNER);
+        mvhline(dialog_top, dialog_left + 1, ACS_HLINE, dialog_width - 2);
+        mvaddch(dialog_top, dialog_left + dialog_width - 1, ACS_URCORNER);
+        for (int r = 1; r < dialog_height - 1; r++) {
+            mvaddch(dialog_top + r, dialog_left, ACS_VLINE);
+            mvaddch(dialog_top + r, dialog_left + dialog_width - 1, ACS_VLINE);
+        }
+        mvaddch(dialog_top + dialog_height - 1, dialog_left, ACS_LLCORNER);
+        mvhline(dialog_top + dialog_height - 1, dialog_left + 1, ACS_HLINE, dialog_width - 2);
+        mvaddch(dialog_top + dialog_height - 1, dialog_left + dialog_width - 1, ACS_LRCORNER);
+
+        const char *message = "you can eject";
+        int msg_left = dialog_left + (dialog_width - (int)strlen(message)) / 2;
+        int msg_row = dialog_top + dialog_height / 2;
+        if (msg_row >= dialog_top + dialog_height) msg_row = dialog_top + dialog_height - 2;
+        mvprintw(msg_row, msg_left, "%s", message);
+        attroff(COLOR_PAIR(3));
+    }
+
+    attroff(COLOR_PAIR(3));
+}
+
 void draw_maven_mode(int remaining_seconds) {
     time_t now = time(NULL);
     struct tm *tm_now = localtime(&now);
@@ -301,8 +437,6 @@ void draw_maven_mode(int remaining_seconds) {
             mvprintw(row++, 0, "[INFO] %s %s", action, file);
         }
     }
-
-    //draw_footer_instructions();
 }
  
 int parse_time(const char *str, struct tm *tm_out) {
@@ -499,8 +633,18 @@ int main(int argc, char *argv[]) {
             save_timebank(timebank_value);
         } else if (strcmp(argv[i], "--discrete") == 0 || strcmp(argv[i], "-d") == 0) {
             discrete_mode = 1;
+            windows_mode = 0;
         } else if (strcmp(argv[i], "--cryptomining") == 0 || strcmp(argv[i], "-c") == 0) {
             crypto_mode = 1;
+            windows_mode = 0;
+        } else if (strcmp(argv[i], "--windows") == 0 || strcmp(argv[i], "-w") == 0) {
+            windows_mode = 1;
+            discrete_mode = 0;
+            maven_mode = 0;
+        } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
+            maven_mode = 1;
+            discrete_mode = 0;
+            crypto_mode = 0;
         } else if (strstr(argv[i], "h") || strstr(argv[i], ":")) {
             parse_time(argv[i], &start_tm);
         } else if (strstr(argv[i], "m")) {
@@ -509,10 +653,6 @@ int main(int argc, char *argv[]) {
             int h;
             sscanf(argv[i], "%dh", &h);
             work_minutes = h * 60;
-            maven_mode = 0;
-        } else if (strcmp(argv[i], "--maven") == 0 || strcmp(argv[i], "-m") == 0) {
-            maven_mode = 1;
-            discrete_mode = 0;
         } else {
             size_t arg_len = strlen(argv[i]);
             int has_am_pm = 0;
@@ -578,6 +718,10 @@ int main(int argc, char *argv[]) {
     use_default_colors();
     init_pair(1, COLOR_WHITE, -1);
     init_pair(2, COLOR_GREEN, -1);
+    init_pair(3, COLOR_WHITE, COLOR_BLUE);
+    init_pair(4, COLOR_YELLOW, COLOR_BLUE);
+    init_pair(5, COLOR_BLACK, COLOR_WHITE);
+    init_pair(6, COLOR_BLACK, COLOR_YELLOW);
     getmaxyx(stdscr, screen_rows, screen_cols);
     timeout(1000);
 
@@ -587,44 +731,57 @@ int main(int argc, char *argv[]) {
         int elapsed_seconds = (int)elapsed;
         int total_minutes = work_minutes + lunch_minutes + break_minutes;
         int remaining_minutes = total_minutes - (int)(elapsed_seconds / 60);
-        int remaining_seconds = total_minutes * 60 - elapsed_seconds;
-
+        int total_seconds = total_minutes * 60;
+        int remaining_seconds = total_seconds - elapsed_seconds;
+        
         clear();
 
-        if (crypto_mode) {
+        if (windows_mode) {
+            draw_windows_mode(remaining_seconds, total_seconds);
+        } else if (crypto_mode) {
             add_crypto_log_entries(remaining_seconds);
             draw_crypto_screen();
-        } else        
-        if (maven_mode) {
+        } else if (maven_mode) {
             draw_maven_mode(remaining_seconds);
         } else if (discrete_mode) {
             draw_discrete_blocks(remaining_minutes);
-            //draw_footer_instructions();
         } else {
-            char version_label[64];
-            snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
-            mvprintw(0, 0, "%s", version_label);
+            wbkgd(stdscr, COLOR_PAIR(0));
+            clear();
 
-            if (discrete_mode) {
+            if (crypto_mode) {
+                add_crypto_log_entries(remaining_seconds);
+                draw_crypto_screen();
+            } else if (maven_mode) {
+                draw_maven_mode(remaining_seconds);
+            } else if (discrete_mode) {
                 draw_discrete_blocks(remaining_minutes);
+                //draw_footer_instructions();
             } else {
-                if (remaining_seconds > 0) {
-                    int digit_height = draw_big_time(remaining_seconds);
-                    if (timebank_enabled) {
-                        char tb_text[64];
-                        snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
-                        draw_centered_text(tb_text, 2, digit_height / 2 + 2);
-                    }
+                char version_label[64];
+                snprintf(version_label, sizeof(version_label), "ClockOut v%s", CLOCKOUT_VERSION);
+                mvprintw(0, 0, "%s", version_label);
+
+                if (discrete_mode) {
+                    draw_discrete_blocks(remaining_minutes);
                 } else {
-                    draw_centered_text("Work time completed!", 2, 0);
-                    if (timebank_enabled) {
-                        char tb_text[64];
-                        snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
-                        draw_centered_text(tb_text, 2, 2);
+                    if (remaining_seconds > 0) {
+                        int digit_height = draw_big_time(remaining_seconds);
+                        if (timebank_enabled) {
+                            char tb_text[64];
+                            snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                            draw_centered_text(tb_text, 2, digit_height / 2 + 2);
+                        }
+                    } else {
+                        draw_centered_text("Work time completed!", 2, 0);
+                        if (timebank_enabled) {
+                            char tb_text[64];
+                            snprintf(tb_text, sizeof(tb_text), "Time Bank: %.2f hours", timebank_value);
+                            draw_centered_text(tb_text, 2, 2);
+                        }
                     }
                 }
             }
-            //draw_footer_instructions();
         }
 
         refresh();
@@ -634,22 +791,36 @@ int main(int argc, char *argv[]) {
                 quit_counter++;
                 if (quit_counter >= 2) break;
             } else if (ch == 'd' || ch == 'D') {
-                discrete_mode = 1;
+                discrete_mode = !discrete_mode;
                 maven_mode = 0;
+                windows_mode = 0;
                 quit_counter = 0;
             } else if (ch == 's' || ch == 'S') {
                 discrete_mode = 0;
                 maven_mode = 0;
+                windows_mode = 0;
+                crypto_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'm' || ch == 'M') {
                 maven_mode = 1;
                 discrete_mode = 0;
+                windows_mode = 0;
+                crypto_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'c' || ch == 'C') {
                 crypto_mode = !crypto_mode;
                 if (crypto_mode) {
                     reset_crypto_logs();
                 }
+                if (crypto_mode) {
+                    windows_mode = 0;
+                }
+                quit_counter = 0;
+            } else if (ch == 'w' || ch == 'W') {
+                windows_mode = 1;
+                maven_mode = 0;
+                discrete_mode = 0;
+                crypto_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'b' || ch == 'B') {
                 quit_counter = 0;
@@ -680,7 +851,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (!crypto_mode && remaining_minutes < 0 && timebank_enabled) {
+        if (remaining_minutes < 0 && timebank_enabled) {
             int extra = -remaining_minutes;
             timebank_value += extra / 60.0;
             save_timebank(timebank_value);
