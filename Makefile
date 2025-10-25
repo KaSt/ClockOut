@@ -2,6 +2,7 @@ CC ?= gcc
 CFLAGS ?= -O3
 CPPFLAGS ?=
 LDFLAGS ?=
+DOCKER ?= docker
 UNAME_S := $(shell uname -s 2>/dev/null)
 
 ifeq ($(UNAME_S),Darwin)
@@ -11,6 +12,7 @@ LDLIBS ?= -lncursesw
 endif
 
 VERSION := $(shell sed -n 's/^static const char CLOCKOUT_VERSION\[\] = "\(.*\)";/\1/p' clockout.c)
+DIST_DIR ?= dist
 
 # Prefer pkg-config for locating json-c headers and libraries. If pkg-config
 # is not available, fall back to Homebrew's default installation prefix when
@@ -32,7 +34,9 @@ CPPFLAGS += $(JSON_C_CFLAGS)
 LDFLAGS += $(filter -L%,$(JSON_C_LIBS))
 LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
-.PHONY: default clean test release
+.PHONY: default clean test release \
+alpine arch debian gentoo redhat suse slackware ubuntu \
+homebrew macports
 
 default: clockout
 
@@ -117,3 +121,62 @@ release: clockout
 			echo "Release $$tag already exists."; \
 		fi; \
 	fi
+define require_docker
+	@if ! command -v $(DOCKER) >/dev/null 2>&1; then \
+		echo "Docker is required to build $1 packages."; \
+		exit 1; \
+	fi
+endef
+
+define docker_package
+	@mkdir -p $(DIST_DIR)
+	@echo "Building $1 package (version $(VERSION))"
+	$(DOCKER) build --build-arg VERSION=$(VERSION) -f docker/$1/Dockerfile -t clockout-$1:$(VERSION) .
+	@cid=$$($(DOCKER) create clockout-$1:$(VERSION)); \
+	$(DOCKER) cp $$cid:/dist/. $(DIST_DIR)/; \
+	$(DOCKER) rm $$cid >/dev/null
+endef
+
+alpine:
+	$(call require_docker,Alpine)
+	$(call docker_package,alpine)
+
+arch:
+	$(call require_docker,Arch)
+	$(call docker_package,arch)
+
+debian:
+	$(call require_docker,Debian)
+	$(call docker_package,debian)
+
+gentoo:
+	$(call require_docker,Gentoo)
+	$(call docker_package,gentoo)
+
+redhat:
+	$(call require_docker,Red Hat)
+	$(call docker_package,redhat)
+
+suse:
+	$(call require_docker,openSUSE)
+	$(call docker_package,suse)
+
+slackware:
+	$(call require_docker,Slackware)
+	$(call docker_package,slackware)
+
+ubuntu:
+	$(call require_docker,Ubuntu)
+	$(call docker_package,ubuntu)
+
+homebrew:
+	@mkdir -p $(DIST_DIR)/homebrew
+	@git archive --format=tar --prefix=clockout-$(VERSION)/ HEAD | gzip > $(DIST_DIR)/homebrew/clockout-$(VERSION).tar.gz
+	@sha=$$( (command -v shasum >/dev/null 2>&1 && shasum -a 256 $(DIST_DIR)/homebrew/clockout-$(VERSION).tar.gz || sha256sum $(DIST_DIR)/homebrew/clockout-$(VERSION).tar.gz) | awk '{print $$1}' ); \
+	sed -e "s/@VERSION@/$(VERSION)/g" -e "s/@SHA256@/$$sha/g" packaging/homebrew/clockout.rb.in > $(DIST_DIR)/homebrew/clockout.rb
+
+macports:
+	@mkdir -p $(DIST_DIR)/macports
+	@git archive --format=tar --prefix=clockout-$(VERSION)/ HEAD | gzip > $(DIST_DIR)/macports/clockout-$(VERSION).tar.gz
+	@sha=$$( (command -v shasum >/dev/null 2>&1 && shasum -a 256 $(DIST_DIR)/macports/clockout-$(VERSION).tar.gz || sha256sum $(DIST_DIR)/macports/clockout-$(VERSION).tar.gz) | awk '{print $$1}' ); \
+	sed -e "s/@VERSION@/$(VERSION)/g" -e "s/@SHA256@/$$sha/g" packaging/macports/Portfile.in > $(DIST_DIR)/macports/Portfile
