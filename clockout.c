@@ -247,6 +247,7 @@ int draw_big_time(int remaining_seconds) {
 #undef DIGIT_WIDTH
 #undef COLON_WIDTH
 
+#ifndef CLOCKOUT_NO_MAIN
 int main(int argc, char *argv[]) {
     setlocale(LC_ALL, "");
     time_t now = time(NULL);
@@ -374,4 +375,5 @@ int main(int argc, char *argv[]) {
     endwin();
     return 0;
 }
- 
+#endif
+

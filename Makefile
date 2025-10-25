@@ -26,16 +26,23 @@ CPPFLAGS += $(JSON_C_CFLAGS)
 LDFLAGS += $(filter -L%,$(JSON_C_LIBS))
 LDLIBS += $(filter-out -L%,$(JSON_C_LIBS))
 
-.PHONY: default clean release
+.PHONY: default clean test release
 
 default: deps clockout
 
 clockout: clockout.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $< $(LDFLAGS) $(LDLIBS) -o $@
 
+test: deps test_clockout
+	./test_clockout
+
+test_clockout: tests/test_clockout.c clockout.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DCLOCKOUT_NO_MAIN $^ $(LDFLAGS) $(LDLIBS) -lm -o $@
+
 clean:
 	rm -f *.o
 	rm -f clockout
+	rm -f test_clockout
 
 deps:
 	sudo apt install -y libjson-c-dev libncurses-dev
