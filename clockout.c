@@ -56,22 +56,105 @@ static const char *crypto_header[] = {
     " GPU 0: 80.0C 2000RPM 1.24Mh/s | A:12495 R:100 HW:0 U:1.11/m"
 };
 
+void set_status_message(const char *fmt, ...) {
+    if (!fmt) {
+        status_message[0] = '\0';
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(status_message, sizeof(status_message), fmt, args);
+    va_end(args);
+}
+
 typedef struct {
     const char *country;
     int infections;
 } BotnetInfection;
 
-#define BOTNET_COUNTRIES 8
-static BotnetInfection botnet_infections[BOTNET_COUNTRIES] = {
+static const BotnetInfection initial_botnet_infections[] = {
     {"US", 12840},
+    {"CN", 12220},
+    {"RU", 9960},
     {"DE", 7420},
     {"IN", 6905},
     {"BR", 5120},
+    {"GB", 4980},
     {"JP", 4312},
+    {"KR", 4155},
     {"FR", 3840},
+    {"IT", 3410},
     {"CA", 2755},
-    {"ZA", 1980}
+    {"ES", 2430},
+    {"AU", 2285},
+    {"NL", 2100},
+    {"SE", 1985},
+    {"ZA", 1980},
+    {"MX", 1830},
+    {"PL", 1744},
+    {"TR", 1635},
+    {"AR", 1525},
+    {"SG", 1408},
+    {"NO", 1302},
+    {"FI", 1258},
+    {"CH", 1189},
+    {"IL", 1104},
+    {"IE", 1036},
+    {"PT", 970},
+    {"MY", 905},
+    {"NZ", 860},
+    {"AE", 795},
+    {"DK", 750},
+    {"HK", 720},
+    {"TW", 688},
+    {"CL", 655},
+    {"PH", 640},
+    {"TH", 622},
+    {"CO", 604},
+    {"RO", 590},
+    {"UA", 575},
+    {"CZ", 560},
+    {"HU", 542},
+    {"GR", 528},
+    {"EG", 512},
+    {"SA", 498},
+    {"VN", 482},
+    {"BE", 470},
+    {"AT", 456},
+    {"KW", 444},
+    {"BG", 430},
+    {"SK", 418},
+    {"HR", 405},
+    {"SI", 392},
+    {"LT", 380},
+    {"LV", 368},
+    {"EE", 355},
+    {"IS", 342},
+    {"LU", 330},
+    {"MT", 318},
+    {"CY", 306},
+    {"ME", 294},
+    {"BA", 282}
 };
+
+#define BOTNET_COUNTRIES (int)(sizeof(initial_botnet_infections) / sizeof(initial_botnet_infections[0]))
+static BotnetInfection botnet_infections[BOTNET_COUNTRIES];
+
+static const char *botnet_process_prefixes[] = {
+    "relay", "socket", "drone", "payload", "mirror", "quantum", "cipher", "ghost",
+    "matrix", "orbital", "mesh", "cache", "proxy", "signal", "vector", "daemon",
+    "channel", "kernel", "beacon", "sentinel", "crawler", "servo", "glyph", "cycle"
+};
+
+static const char *botnet_process_suffixes[] = {
+    "scheduler", "binder", "orchestrator", "smelter", "sentinel", "spider", "router",
+    "synthesizer", "uplink", "overseer", "compiler", "stalker", "aggregator", "locator",
+    "sequencer", "observer", "switch", "vector", "breacher", "handler", "diffuser",
+    "analyzer", "engine", "weaver"
+};
+
+static int botnet_process_counter = 0;
 
 #define BOTNET_LOG_CAPACITY 256
 #define BOTNET_LOG_WIDTH 160
@@ -96,9 +179,8 @@ static const char *botnet_targets[] = {
 };
 
 static void reset_botnet_state() {
-    const int seed_values[BOTNET_COUNTRIES] = {12840, 7420, 6905, 5120, 4312, 3840, 2755, 1980};
     for (int i = 0; i < BOTNET_COUNTRIES; i++) {
-        botnet_infections[i].infections = seed_values[i];
+        botnet_infections[i] = initial_botnet_infections[i];
     }
     botnet_log_head = 0;
     botnet_log_size = 0;
@@ -246,6 +328,42 @@ static void draw_botnet_process_panel(int top, int left, int height, int width, 
     snprintf(cpu_buffer, sizeof(cpu_buffer), "%02d.%02d", hours, minutes);
 
     const char *core_task = "tonkacore-scheduler";
+    int task_width = width - 13;
+    if (task_width > 0) {
+        mvprintw(top + 2, left, "4211   %s  %-*.*s", cpu_buffer, task_width, task_width, core_task);
+    } else {
+        mvprintw(top + 2, left, "4211   %s", cpu_buffer);
+    }
+
+    int rows_available = height - 3;
+    if (rows_available <= 0) {
+        return;
+    }
+
+    int prefix_count = (int)(sizeof(botnet_process_prefixes) / sizeof(botnet_process_prefixes[0]));
+    int suffix_count = (int)(sizeof(botnet_process_suffixes) / sizeof(botnet_process_suffixes[0]));
+
+    if (prefix_count == 0 || suffix_count == 0) {
+        return;
+    }
+
+    for (int i = 0; i < rows_available; i++) {
+        double load = 5.0 + (rand() % 950) / 10.0;
+        int pid = 5100 + ((botnet_process_counter + i * 17) % 3890);
+        const char *prefix = botnet_process_prefixes[(botnet_process_counter + i) % prefix_count];
+        const char *suffix = botnet_process_suffixes[(botnet_process_counter / prefix_count + i) % suffix_count];
+
+        char task_buffer[64];
+        snprintf(task_buffer, sizeof(task_buffer), "%s-%s", prefix, suffix);
+
+        if (task_width > 0) {
+            mvprintw(top + 3 + i, left, "%4d   %05.1f  %-*.*s", pid, load, task_width, task_width, task_buffer);
+        } else {
+            mvprintw(top + 3 + i, left, "%4d   %05.1f", pid, load);
+        }
+    }
+
+    botnet_process_counter = (botnet_process_counter + 1) % (prefix_count * suffix_count);
     mvprintw(top + 2, left, "4211   %s  %s", cpu_buffer, core_task);
 
     const char *extra_tasks[] = {
@@ -253,7 +371,7 @@ static void draw_botnet_process_panel(int top, int left, int height, int width, 
         "mirror-sentinel", "quantum-spider"
     };
 
-    int rows_available = height - 3;
+    rows_available = height - 3;
     for (int i = 0; i < rows_available && i < (int)(sizeof(extra_tasks) / sizeof(extra_tasks[0])); i++) {
         double load = (rand() % 900) / 10.0;
         int pid = 5300 + rand() % 400;
@@ -280,7 +398,7 @@ static void draw_botnet_mode(int remaining_seconds) {
     int process_width = panel_width + remainder;
 
     draw_botnet_infection_panel(inner_top, inner_left, inner_height, infection_width);
-    draw_botnet_logs_panel(inner_top, inner_left + infection_width + 1, inner_height, logs_width);
+    draw_botnet_logs_panel(inner_top, inner_left + infection_width - 30, inner_height, logs_width + 30);
     draw_botnet_process_panel(inner_top, inner_left + infection_width + logs_width + 2, inner_height, process_width, remaining_seconds);
 
     if (status_message[0] != '\0') {
@@ -384,18 +502,6 @@ static void draw_status_line() {
         mvprintw(row, 1, "%s", status_message);
         attroff(COLOR_PAIR(8));
     }
-}
-
-void set_status_message(const char *fmt, ...) {
-    if (!fmt) {
-        status_message[0] = '\0';
-        return;
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(status_message, sizeof(status_message), fmt, args);
-    va_end(args);
 }
 
 void reset_crypto_logs() {
