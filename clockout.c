@@ -56,6 +56,18 @@ static const char *crypto_header[] = {
     " GPU 0: 80.0C 2000RPM 1.24Mh/s | A:12495 R:100 HW:0 U:1.11/m"
 };
 
+void set_status_message(const char *fmt, ...) {
+    if (!fmt) {
+        status_message[0] = '\0';
+        return;
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(status_message, sizeof(status_message), fmt, args);
+    va_end(args);
+}
+
 typedef struct {
     const char *country;
     int infections;
@@ -359,7 +371,7 @@ static void draw_botnet_process_panel(int top, int left, int height, int width, 
         "mirror-sentinel", "quantum-spider"
     };
 
-    int rows_available = height - 3;
+    rows_available = height - 3;
     for (int i = 0; i < rows_available && i < (int)(sizeof(extra_tasks) / sizeof(extra_tasks[0])); i++) {
         double load = (rand() % 900) / 10.0;
         int pid = 5300 + rand() % 400;
@@ -386,7 +398,7 @@ static void draw_botnet_mode(int remaining_seconds) {
     int process_width = panel_width + remainder;
 
     draw_botnet_infection_panel(inner_top, inner_left, inner_height, infection_width);
-    draw_botnet_logs_panel(inner_top, inner_left + infection_width + 1, inner_height, logs_width);
+    draw_botnet_logs_panel(inner_top, inner_left + infection_width - 30, inner_height, logs_width + 30);
     draw_botnet_process_panel(inner_top, inner_left + infection_width + logs_width + 2, inner_height, process_width, remaining_seconds);
 
     if (status_message[0] != '\0') {
@@ -490,18 +502,6 @@ static void draw_status_line() {
         mvprintw(row, 1, "%s", status_message);
         attroff(COLOR_PAIR(8));
     }
-}
-
-void set_status_message(const char *fmt, ...) {
-    if (!fmt) {
-        status_message[0] = '\0';
-        return;
-    }
-
-    va_list args;
-    va_start(args, fmt);
-    vsnprintf(status_message, sizeof(status_message), fmt, args);
-    va_end(args);
 }
 
 void reset_crypto_logs() {
