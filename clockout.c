@@ -33,6 +33,7 @@ int windows_mode = 0;
 int quit_counter = 0;
 int crypto_mode = 0;
 int botnet_mode = 0;
+int matrix_mode = 0;
 double timebank_value = 0.0;
 struct tm start_tm;
 
@@ -178,12 +179,77 @@ static const char *botnet_targets[] = {
     "orbital-uplink", "satfarm", "supply-chain", "autonomous-fleet"
 };
 
+/* C2 server tracking */
+typedef struct {
+    char name[24];
+    char status[8]; /* "ACTIVE", "WARN", "DOWN" */
+    int latency_ms;
+} BotnetC2Server;
+
+static BotnetC2Server botnet_c2_servers[] = {
+    {"alpha-c2.onion", "ACTIVE",  12},
+    {"beta-c2.onion",  "ACTIVE",  34},
+    {"gamma-c2.onion", "WARN",    98},
+    {"delta-c2.onion", "DOWN",     0},
+};
+#define BOTNET_C2_COUNT (int)(sizeof(botnet_c2_servers) / sizeof(botnet_c2_servers[0]))
+
+/* Bot category breakdown */
+typedef struct {
+    const char *name;
+    int count;
+    int running;
+} BotnetBotCategory;
+
+static BotnetBotCategory botnet_categories[] = {
+    {"MINERS",   23412, 1},
+    {"DDoS",      8950, 1},
+    {"LOADERS",   4280, 0},
+    {"SPAMBOTS",  3120, 0},
+    {"PROXIES",   2104, 1},
+};
+#define BOTNET_CATEGORY_COUNT (int)(sizeof(botnet_categories) / sizeof(botnet_categories[0]))
+
+/* Active operation campaigns */
+static const char *botnet_campaign_names[]    = {"COLDWAVE", "DARKSKY", "IRONFIST"};
+static const char *botnet_campaign_statuses[] = {"RUNNING",  "STAGING", "DORMANT"};
+#define BOTNET_CAMPAIGN_COUNT \
+    (int)(sizeof(botnet_campaign_names) / sizeof(botnet_campaign_names[0]))
+
+/* Live metrics updated each frame */
+static double botnet_upload_gbps    = 1.2;
+static double botnet_download_mbps  = 8.4;
+static int    botnet_new_per_second = 0;
+static int    botnet_elapsed_ticks  = 0;
+
+static int botnet_total_bots() {
+    int total = 0;
+    for (int i = 0; i < BOTNET_CATEGORY_COUNT; i++) {
+        total += botnet_categories[i].count;
+    }
+    return total;
+}
+
 static void reset_botnet_state() {
     for (int i = 0; i < BOTNET_COUNTRIES; i++) {
         botnet_infections[i] = initial_botnet_infections[i];
     }
     botnet_log_head = 0;
     botnet_log_size = 0;
+    /* Reset bot categories to initial counts */
+    static const int init_counts[5] = {23412, 8950, 4280, 3120, 2104};
+    for (int i = 0; i < BOTNET_CATEGORY_COUNT; i++) {
+        botnet_categories[i].count = init_counts[i];
+    }
+    /* Reset C2 servers to initial state */
+    strncpy(botnet_c2_servers[0].status, "ACTIVE", 8); botnet_c2_servers[0].latency_ms = 12;
+    strncpy(botnet_c2_servers[1].status, "ACTIVE", 8); botnet_c2_servers[1].latency_ms = 34;
+    strncpy(botnet_c2_servers[2].status, "WARN",   8); botnet_c2_servers[2].latency_ms = 98;
+    strncpy(botnet_c2_servers[3].status, "DOWN",   8); botnet_c2_servers[3].latency_ms =  0;
+    botnet_upload_gbps    = 1.2;
+    botnet_download_mbps  = 8.4;
+    botnet_new_per_second = 0;
+    botnet_elapsed_ticks  = 0;
 }
 
 static void append_botnet_log(const char *line) {
@@ -204,6 +270,29 @@ static void update_botnet_infections() {
         int spike = rand() % 250;
         botnet_infections[i].infections += 20 + spike;
     }
+    /* Update bot category counts */
+    for (int i = 0; i < BOTNET_CATEGORY_COUNT; i++) {
+        if (botnet_categories[i].running) {
+            botnet_categories[i].count += rand() % 12;
+        }
+    }
+    /* Update live network metrics */
+    botnet_upload_gbps    = 0.4 + (rand() % 40) / 10.0;
+    botnet_download_mbps  = 2.0 + (rand() % 200) / 10.0;
+    botnet_new_per_second = 80 + rand() % 500;
+    botnet_elapsed_ticks++;
+    /* Occasionally jitter C2 server latency / status */
+    if (rand() % 25 == 0) {
+        int s = rand() % BOTNET_C2_COUNT;
+        if (strcmp(botnet_c2_servers[s].status, "DOWN") != 0) {
+            botnet_c2_servers[s].latency_ms = 5 + rand() % 160;
+            if (botnet_c2_servers[s].latency_ms > 110) {
+                strncpy(botnet_c2_servers[s].status, "WARN",   8);
+            } else {
+                strncpy(botnet_c2_servers[s].status, "ACTIVE", 8);
+            }
+        }
+    }
 }
 
 static void add_botnet_log_entry() {
@@ -211,9 +300,24 @@ static void add_botnet_log_entry() {
     const char *operation = botnet_operations[rand() % (sizeof(botnet_operations) / sizeof(botnet_operations[0]))];
     const char *target = botnet_targets[rand() % (sizeof(botnet_targets) / sizeof(botnet_targets[0]))];
 
-    int wave = 50 + rand() % 950;
-    int batch = 1 + rand() % 64;
-    snprintf(buffer, sizeof(buffer), "[TonkaBotnet] wave:%03d batch:%02d :: %s -> %s", wave, batch, operation, target);
+    int wave  = 50 + rand() % 950;
+    int batch =  1 + rand() % 64;
+
+    /* Fake wall-clock timestamp */
+    time_t now = time(NULL);
+    struct tm *tm_now = localtime(&now);
+
+    /* Fake source IP (private ranges look more C2-ish) */
+    int ip_a = 10 + rand() % 245;
+    int ip_b = rand() % 256;
+    int ip_c = rand() % 256;
+    int ip_d = 1   + rand() % 254;
+
+    snprintf(buffer, sizeof(buffer),
+        "[%02d:%02d:%02d] %d.%d.%d.%d w:%03d b:%02d :: %s -> %s",
+        tm_now->tm_hour, tm_now->tm_min, tm_now->tm_sec,
+        ip_a, ip_b, ip_c, ip_d,
+        wave, batch, operation, target);
     append_botnet_log(buffer);
 }
 
@@ -250,156 +354,323 @@ static void draw_botnet_border() {
     mvaddch(screen_rows - 2, screen_cols - 1, '+');
     attroff(COLOR_PAIR(7));
 
-    const char *title = "*** TONKABOTNET OPS CENTER ***";
+    const char *title = "*** TONKABOTNET C2 OPS CENTER ***";
     int title_col = (screen_cols - (int)strlen(title)) / 2;
     if (title_col < 2) title_col = 2;
-    attron(COLOR_PAIR(8));
+    attron(COLOR_PAIR(8) | A_BOLD);
     mvprintw(0, title_col, "%s", title);
-    attroff(COLOR_PAIR(8));
+    attroff(COLOR_PAIR(8) | A_BOLD);
+
+    /* Sub-header: aggregate live stats */
+    if (screen_rows >= 4 && screen_cols >= 40) {
+        int total = botnet_total_bots();
+        int c2_up = 0;
+        for (int i = 0; i < BOTNET_C2_COUNT; i++) {
+            if (strcmp(botnet_c2_servers[i].status, "DOWN") != 0) {
+                c2_up++;
+            }
+        }
+        char stats[256];
+        snprintf(stats, sizeof(stats),
+            " BOTS:%7d | ALERT:CRITICAL | C2:%d/%d UP | BW:^%.1fG/v%.0fM | +%d/s ",
+            total, c2_up, BOTNET_C2_COUNT,
+            botnet_upload_gbps, botnet_download_mbps, botnet_new_per_second);
+        attron(COLOR_PAIR(10) | A_BOLD);
+        int sc = (screen_cols - (int)strlen(stats)) / 2;
+        if (sc < 1) sc = 1;
+        mvprintw(1, sc, "%.*s", screen_cols - 2, stats);
+        attroff(COLOR_PAIR(10) | A_BOLD);
+
+        /* Separator line below the stats row */
+        attron(COLOR_PAIR(7));
+        for (int col = 1; col < screen_cols - 1; col++) {
+            mvaddch(2, col, '-');
+        }
+        mvaddch(2, 0, '|');
+        mvaddch(2, screen_cols - 1, '|');
+        attroff(COLOR_PAIR(7));
+    }
 }
 
 static void draw_botnet_infection_panel(int top, int left, int height, int width) {
-    attron(COLOR_PAIR(8));
-    mvprintw(top, left, "INFECTED NODES");
-    attroff(COLOR_PAIR(8));
+    int row = top;
+    int panel_end = top + height; /* precomputed to avoid repeated addition */
 
-    if (height <= 2) {
+    /* Panel header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8) | A_BOLD);
+        mvprintw(row++, left, "BOTNET STATUS");
+        attroff(COLOR_PAIR(8) | A_BOLD);
+    }
+
+    /* C2 server status */
+    for (int i = 0; i < BOTNET_C2_COUNT && row < panel_end - 1; i++) {
+        const char *indicator;
+        int cp;
+        if (strcmp(botnet_c2_servers[i].status, "ACTIVE") == 0) {
+            indicator = "[+]"; cp = 2;  /* green */
+        } else if (strcmp(botnet_c2_servers[i].status, "WARN") == 0) {
+            indicator = "[~]"; cp = 11; /* yellow */
+        } else {
+            indicator = "[X]"; cp = 10; /* red */
+        }
+        attron(COLOR_PAIR(cp) | A_BOLD);
+        mvprintw(row, left, "%s", indicator);
+        attroff(COLOR_PAIR(cp) | A_BOLD);
+
+        char entry[48];
+        if (strcmp(botnet_c2_servers[i].status, "DOWN") == 0) {
+            snprintf(entry, sizeof(entry), " %-16.16s  DOWN", botnet_c2_servers[i].name);
+        } else {
+            snprintf(entry, sizeof(entry), " %-16.16s %3dms",
+                     botnet_c2_servers[i].name, botnet_c2_servers[i].latency_ms);
+        }
+        mvprintw(row++, left + 3, "%-*.*s", width - 4, width - 4, entry);
+    }
+
+    /* Separator */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(7));
+        for (int c = left; c < left + width && c < screen_cols; c++) {
+            mvaddch(row, c, '-');
+        }
+        attroff(COLOR_PAIR(7));
+        row++;
+    }
+
+    /* Infected nodes sub-header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8));
+        mvprintw(row++, left, "INFECTED NODES");
+        attroff(COLOR_PAIR(8));
+    }
+
+    if (row >= panel_end) {
         return;
     }
 
+    /* Sorted infection list */
     BotnetInfection *sorted[BOTNET_COUNTRIES];
     for (int i = 0; i < BOTNET_COUNTRIES; i++) {
         sorted[i] = &botnet_infections[i];
     }
     qsort(sorted, BOTNET_COUNTRIES, sizeof(sorted[0]), compare_infections_desc);
 
-    int rows_available = height - 2;
-    if (rows_available > BOTNET_COUNTRIES) {
-        rows_available = BOTNET_COUNTRIES;
-    }
-
-    for (int i = 0; i < rows_available; i++) {
-        int row = top + 1 + i;
+    for (int i = 0; row < panel_end && i < BOTNET_COUNTRIES; i++) {
         attron(COLOR_PAIR(9));
-        mvprintw(row, left, "%2s ", sorted[i]->country);
+        mvprintw(row, left, "%2s", sorted[i]->country);
         attroff(COLOR_PAIR(9));
         int value_col = left + 4;
         if (value_col < left + width) {
             mvprintw(row, value_col, "%7d infections", sorted[i]->infections);
         }
+        row++;
     }
 }
 
 static void draw_botnet_logs_panel(int top, int left, int height, int width) {
-    attron(COLOR_PAIR(8));
-    mvprintw(top, left, "COORDINATED STRIKES");
-    attroff(COLOR_PAIR(8));
+    int row = top;
+    int panel_end = top + height;
 
-    int usable = height - 2;
-    if (usable <= 0) return;
+    /* Panel header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8) | A_BOLD);
+        mvprintw(row++, left, "OPERATIONS");
+        attroff(COLOR_PAIR(8) | A_BOLD);
+    }
 
-    int to_show = botnet_log_size < usable ? botnet_log_size : usable;
-    int start = botnet_log_size - to_show;
+    /* Active campaigns */
+    for (int i = 0; i < BOTNET_CAMPAIGN_COUNT && row < panel_end - 1; i++) {
+        const char *status = botnet_campaign_statuses[i];
+        const char *tag;
+        int cp;
+        if (strcmp(status, "RUNNING") == 0)      { tag = "[>>>]"; cp = 10; /* red */    }
+        else if (strcmp(status, "STAGING") == 0) { tag = "[ > ]"; cp = 11; /* yellow */ }
+        else                                      { tag = "[   ]"; cp = 9;  /* magenta */}
+
+        attron(COLOR_PAIR(cp) | A_BOLD);
+        mvprintw(row, left, "%s", tag);
+        attroff(COLOR_PAIR(cp) | A_BOLD);
+
+        char entry[48];
+        snprintf(entry, sizeof(entry), " %-9.9s %s",
+                 botnet_campaign_names[i], status);
+        mvprintw(row++, left + 5, "%-*.*s", width - 6, width - 6, entry);
+    }
+
+    /* Separator */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(7));
+        for (int c = left; c < left + width && c < screen_cols; c++) {
+            mvaddch(row, c, '-');
+        }
+        attroff(COLOR_PAIR(7));
+        row++;
+    }
+
+    /* C2 command log sub-header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8));
+        mvprintw(row++, left, "C2 COMMAND LOG");
+        attroff(COLOR_PAIR(8));
+    }
+
+    /* Log entries – most recent at the bottom */
+    int log_rows = panel_end - row;
+    if (log_rows <= 0) return;
+
+    int to_show = botnet_log_size < log_rows ? botnet_log_size : log_rows;
+    int start   = botnet_log_size - to_show;
     for (int i = 0; i < to_show; i++) {
         int idx = (botnet_log_head + start + i) % BOTNET_LOG_CAPACITY;
-        int row = top + 1 + i;
-        mvprintw(row, left, "%-*.*s", width, width, botnet_logs[idx]);
+        mvprintw(row++, left, "%-*.*s", width, width, botnet_logs[idx]);
     }
 }
 
 static void draw_botnet_process_panel(int top, int left, int height, int width, int remaining_seconds) {
-    attron(COLOR_PAIR(8));
-    mvprintw(top, left, "PROCESS GRID");
-    attroff(COLOR_PAIR(8));
+    int row = top;
+    int panel_end = top + height;
 
-    if (height <= 2) {
-        return;
+    /* Panel header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8) | A_BOLD);
+        mvprintw(row++, left, "SYSTEM GRID");
+        attroff(COLOR_PAIR(8) | A_BOLD);
     }
 
-    const char *headers = "PID    CPU   TASK";
-    mvprintw(top + 1, left, "%s", headers);
+    /* Network bandwidth stats */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(2));
+        mvprintw(row++, left, "^ %.1f GB/s  v %.0f MB/s  +%d/s",
+                 botnet_upload_gbps, botnet_download_mbps, botnet_new_per_second);
+        attroff(COLOR_PAIR(2));
+    }
 
-    int hours = remaining_seconds / 3600;
-    if (hours < 0) hours = 0;
+    /* Separator */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(7));
+        for (int c = left; c < left + width && c < screen_cols; c++) {
+            mvaddch(row, c, '-');
+        }
+        attroff(COLOR_PAIR(7));
+        row++;
+    }
+
+    /* Bot category breakdown */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8));
+        mvprintw(row++, left, "BOT POOL");
+        attroff(COLOR_PAIR(8));
+    }
+    for (int i = 0; i < BOTNET_CATEGORY_COUNT && row < panel_end - 1; i++) {
+        int cp = botnet_categories[i].running ? 2 : 9;
+        const char *state = botnet_categories[i].running ? "[RUN]" : "[IDL]";
+        attron(COLOR_PAIR(cp));
+        mvprintw(row, left, "%s", state);
+        attroff(COLOR_PAIR(cp));
+        mvprintw(row++, left + 5, " %-8.8s %6d",
+                 botnet_categories[i].name, botnet_categories[i].count);
+    }
+
+    /* Separator */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(7));
+        for (int c = left; c < left + width && c < screen_cols; c++) {
+            mvaddch(row, c, '-');
+        }
+        attroff(COLOR_PAIR(7));
+        row++;
+    }
+
+    /* Process grid sub-header */
+    if (row < panel_end) {
+        attron(COLOR_PAIR(8));
+        mvprintw(row++, left, "PID    CPU   TASK");
+        attroff(COLOR_PAIR(8));
+    }
+
+    /* tonkacore sentinel – CPU% shows remaining HH:MM */
+    int hours   = remaining_seconds / 3600;
+    if (hours   < 0) hours   = 0;
     int minutes = (remaining_seconds % 3600) / 60;
     if (minutes < 0) minutes = 0;
 
     char cpu_buffer[16];
     snprintf(cpu_buffer, sizeof(cpu_buffer), "%02d.%02d", hours, minutes);
 
-    const char *core_task = "tonkacore-scheduler";
     int task_width = width - 13;
-    if (task_width > 0) {
-        mvprintw(top + 2, left, "4211   %s  %-*.*s", cpu_buffer, task_width, task_width, core_task);
-    } else {
-        mvprintw(top + 2, left, "4211   %s", cpu_buffer);
+    if (row < panel_end) {
+        const char *core_task = "tonkacore-scheduler";
+        if (task_width > 0) {
+            mvprintw(row++, left, "4211   %s  %-*.*s",
+                     cpu_buffer, task_width, task_width, core_task);
+        } else {
+            mvprintw(row++, left, "4211   %s", cpu_buffer);
+        }
     }
 
-    int rows_available = height - 3;
-    if (rows_available <= 0) {
-        return;
-    }
-
+    /* Rotating fake worker processes */
     int prefix_count = (int)(sizeof(botnet_process_prefixes) / sizeof(botnet_process_prefixes[0]));
     int suffix_count = (int)(sizeof(botnet_process_suffixes) / sizeof(botnet_process_suffixes[0]));
 
-    if (prefix_count == 0 || suffix_count == 0) {
-        return;
-    }
-
-    for (int i = 0; i < rows_available; i++) {
+    for (; row < panel_end && prefix_count > 0 && suffix_count > 0; row++) {
+        int idx = row - top;
         double load = 5.0 + (rand() % 950) / 10.0;
-        int pid = 5100 + ((botnet_process_counter + i * 17) % 3890);
-        const char *prefix = botnet_process_prefixes[(botnet_process_counter + i) % prefix_count];
-        const char *suffix = botnet_process_suffixes[(botnet_process_counter / prefix_count + i) % suffix_count];
+        int pid = 5100 + ((botnet_process_counter + idx * 17) % 3890);
+        const char *prefix = botnet_process_prefixes[(botnet_process_counter + idx) % prefix_count];
+        const char *suffix = botnet_process_suffixes[(botnet_process_counter / prefix_count + idx) % suffix_count];
 
         char task_buffer[64];
         snprintf(task_buffer, sizeof(task_buffer), "%s-%s", prefix, suffix);
 
         if (task_width > 0) {
-            mvprintw(top + 3 + i, left, "%4d   %05.1f  %-*.*s", pid, load, task_width, task_width, task_buffer);
+            mvprintw(row, left, "%4d   %05.1f  %-*.*s",
+                     pid, load, task_width, task_width, task_buffer);
         } else {
-            mvprintw(top + 3 + i, left, "%4d   %05.1f", pid, load);
+            mvprintw(row, left, "%4d   %05.1f", pid, load);
         }
     }
 
     botnet_process_counter = (botnet_process_counter + 1) % (prefix_count * suffix_count);
-    mvprintw(top + 2, left, "4211   %s  %s", cpu_buffer, core_task);
-
-    const char *extra_tasks[] = {
-        "relay-mapper", "socket-binder", "drone-orchestrator", "payload-smelter",
-        "mirror-sentinel", "quantum-spider"
-    };
-
-    rows_available = height - 3;
-    for (int i = 0; i < rows_available && i < (int)(sizeof(extra_tasks) / sizeof(extra_tasks[0])); i++) {
-        double load = (rand() % 900) / 10.0;
-        int pid = 5300 + rand() % 400;
-        mvprintw(top + 3 + i, left, "%4d   %05.1f  %s", pid, load, extra_tasks[i]);
-    }
 }
 
 static void draw_botnet_mode(int remaining_seconds) {
     wbkgd(stdscr, COLOR_PAIR(0));
     draw_botnet_border();
 
-    int inner_top = 1;
+    /* Panels start below the stats sub-header + separator (rows 0-2) */
+    int inner_top = 3;
     int inner_left = 2;
-    int inner_height = screen_rows - 4;
+    int inner_height = screen_rows - 6; /* top border + stats + sep + bottom border + status */
     if (inner_height < 1) return;
     int inner_width = screen_cols - 4;
     if (inner_width < 3) return;
 
     int panel_width = inner_width / 3;
-    int remainder = inner_width - panel_width * 3;
+    int remainder   = inner_width - panel_width * 3;
 
+    /* Subtract 2 separator columns so panels don't physically overlap */
     int infection_width = panel_width;
-    int logs_width = panel_width;
-    int process_width = panel_width + remainder;
+    int logs_width      = panel_width;
+    int process_width   = panel_width + remainder;
 
-    draw_botnet_infection_panel(inner_top, inner_left, inner_height, infection_width);
-    draw_botnet_logs_panel(inner_top, inner_left + infection_width - 30, inner_height, logs_width + 30);
-    draw_botnet_process_panel(inner_top, inner_left + infection_width + logs_width + 2, inner_height, process_width, remaining_seconds);
+    int sep1_col = inner_left + infection_width;
+    int sep2_col = sep1_col + 1 + logs_width;
+
+    draw_botnet_infection_panel(inner_top, inner_left,
+                                inner_height, infection_width);
+    draw_botnet_logs_panel(inner_top, sep1_col + 1,
+                           inner_height, logs_width);
+    draw_botnet_process_panel(inner_top, sep2_col + 1,
+                              inner_height, process_width, remaining_seconds);
+
+    /* Draw panel separators after content so they sit on top */
+    attron(COLOR_PAIR(7));
+    for (int r = inner_top; r < inner_top + inner_height; r++) {
+        mvaddch(r, sep1_col, '|');
+        mvaddch(r, sep2_col, '|');
+    }
+    attroff(COLOR_PAIR(7));
 
     if (status_message[0] != '\0') {
         attron(COLOR_PAIR(9));
@@ -407,6 +678,127 @@ static void draw_botnet_mode(int remaining_seconds) {
         attroff(COLOR_PAIR(9));
     } else {
         mvprintw(screen_rows - 1, 2, "%-*s", screen_cols - 4, "");
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  MATRIX DIGITAL RAIN MODE                                           */
+/* ------------------------------------------------------------------ */
+
+#define MATRIX_MAX_STREAMS 512
+
+typedef struct {
+    int active;
+    int head_row;
+    int length;
+    int speed; /* frames between row advances (1 = fastest) */
+    int tick;
+} MatrixStream;
+
+static MatrixStream matrix_streams[MATRIX_MAX_STREAMS];
+
+static const char matrix_charset[] =
+    "0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    ":;!@#$%&*+=?~\\|<>[]{}^/";
+
+static void initialize_matrix() {
+    int cols = screen_cols < MATRIX_MAX_STREAMS ? screen_cols : MATRIX_MAX_STREAMS;
+    for (int i = 0; i < cols; i++) {
+        matrix_streams[i].active   = (rand() % 3 == 0);
+        matrix_streams[i].head_row = rand() % (screen_rows > 1 ? screen_rows : 1);
+        matrix_streams[i].length   = 4 + rand() % 18;
+        matrix_streams[i].speed    = 1 + rand() % 3;
+        matrix_streams[i].tick     = 0;
+    }
+}
+
+static void update_matrix() {
+    int cols = screen_cols < MATRIX_MAX_STREAMS ? screen_cols : MATRIX_MAX_STREAMS;
+    for (int i = 0; i < cols; i++) {
+        if (!matrix_streams[i].active) {
+            if (rand() % 40 == 0) {
+                matrix_streams[i].active   = 1;
+                matrix_streams[i].head_row = 0;
+                matrix_streams[i].length   = 4 + rand() % 18;
+                matrix_streams[i].speed    = 1 + rand() % 3;
+                matrix_streams[i].tick     = 0;
+            }
+            continue;
+        }
+        matrix_streams[i].tick++;
+        if (matrix_streams[i].tick >= matrix_streams[i].speed) {
+            matrix_streams[i].tick = 0;
+            matrix_streams[i].head_row++;
+        }
+        if (matrix_streams[i].head_row - matrix_streams[i].length > screen_rows) {
+            matrix_streams[i].active = 0;
+        }
+    }
+}
+
+static void draw_matrix_mode(int remaining_seconds) {
+    wbkgd(stdscr, COLOR_PAIR(0));
+
+    int cs_len = (int)(sizeof(matrix_charset) - 1);
+    int cols   = screen_cols < MATRIX_MAX_STREAMS ? screen_cols : MATRIX_MAX_STREAMS;
+
+    for (int col = 0; col < cols; col++) {
+        if (!matrix_streams[col].active) continue;
+
+        int head = matrix_streams[col].head_row;
+        int len  = matrix_streams[col].length;
+
+        for (int r = 0; r < screen_rows - 1; r++) {
+            int dist = head - r;
+            if (dist < 0 || dist > len) continue;
+
+            char c = matrix_charset[rand() % cs_len];
+            if (dist == 0) {
+                /* Bright white head character */
+                attron(COLOR_PAIR(1) | A_BOLD);
+                mvaddch(r, col, c);
+                attroff(COLOR_PAIR(1) | A_BOLD);
+            } else if (dist <= 3) {
+                /* Bright green near head */
+                attron(COLOR_PAIR(2) | A_BOLD);
+                mvaddch(r, col, c);
+                attroff(COLOR_PAIR(2) | A_BOLD);
+            } else {
+                /* Fading green tail */
+                attron(COLOR_PAIR(2));
+                mvaddch(r, col, c);
+                attroff(COLOR_PAIR(2));
+            }
+        }
+    }
+
+    /* Remaining-time overlay centred on screen */
+    if (screen_rows >= 3 && screen_cols >= 10) {
+        int hours   = remaining_seconds / 3600;
+        int minutes = (remaining_seconds % 3600) / 60;
+        int secs    = remaining_seconds % 60;
+        char time_str[24];
+        if (remaining_seconds > 0) {
+            snprintf(time_str, sizeof(time_str), "[ %02d:%02d:%02d ]", hours, minutes, secs);
+        } else {
+            snprintf(time_str, sizeof(time_str), "[ SHIFT COMPLETE ]");
+        }
+        int tr = screen_rows / 2;
+        int tc = (screen_cols - (int)strlen(time_str)) / 2;
+        if (tc < 0) tc = 0;
+        attron(COLOR_PAIR(1) | A_BOLD);
+        mvprintw(tr, tc, "%s", time_str);
+        attroff(COLOR_PAIR(1) | A_BOLD);
+    }
+
+    /* Status bar at the bottom */
+    if (screen_rows >= 2) {
+        attron(COLOR_PAIR(2));
+        mvprintw(screen_rows - 1, 0, "%-*s", screen_cols - 1,
+                 "[MATRIX MODE]  x: exit");
+        attroff(COLOR_PAIR(2));
     }
 }
 
@@ -1107,6 +1499,14 @@ int main(int argc, char *argv[]) {
             maven_mode = 0;
             windows_mode = 0;
             crypto_mode = 0;
+            matrix_mode = 0;
+        } else if (strcmp(argv[i], "--matrix") == 0 || strcmp(argv[i], "-x") == 0) {
+            matrix_mode = 1;
+            botnet_mode = 0;
+            discrete_mode = 0;
+            maven_mode = 0;
+            windows_mode = 0;
+            crypto_mode = 0;
         } else if (strstr(argv[i], "h") || strstr(argv[i], ":")) {
             parse_time(argv[i], &start_tm);
         } else if (strstr(argv[i], "m")) {
@@ -1169,6 +1569,10 @@ int main(int argc, char *argv[]) {
     if (crypto_mode) {
         reset_crypto_logs();
     }
+
+    if (matrix_mode) {
+        initialize_matrix();
+    }
  
     if (timebank_enabled) {
         load_timebank();
@@ -1191,6 +1595,8 @@ int main(int argc, char *argv[]) {
     init_pair(7, COLOR_GREEN, -1);
     init_pair(8, COLOR_CYAN, -1);
     init_pair(9, COLOR_MAGENTA, -1);
+    init_pair(10, COLOR_RED, -1);
+    init_pair(11, COLOR_YELLOW, -1);
     getmaxyx(stdscr, screen_rows, screen_cols);
     timeout(1000);
 
@@ -1209,6 +1615,9 @@ int main(int argc, char *argv[]) {
             update_botnet_infections();
             add_botnet_log_entry();
             draw_botnet_mode(remaining_seconds);
+        } else if (matrix_mode) {
+            update_matrix();
+            draw_matrix_mode(remaining_seconds);
         } else if (windows_mode) {
             draw_windows_mode(remaining_seconds, total_seconds);
         } else if (crypto_mode) {
@@ -1257,11 +1666,13 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (!botnet_mode) {
+        if (!botnet_mode && !matrix_mode) {
             draw_status_line();
         }
 
         refresh();
+        /* Matrix rain looks best at ~10 fps; all other modes are fine at 1 fps */
+        timeout(matrix_mode ? 100 : 1000);
         int ch = getch();
         if (ch != ERR) {
             if (ch == 'q' || ch == 'Q') {
@@ -1278,6 +1689,7 @@ int main(int argc, char *argv[]) {
                 windows_mode = 0;
                 crypto_mode = 0;
                 botnet_mode = 0;
+                matrix_mode = 0;
                 quit_counter = 0;
             } else if (ch == 'm' || ch == 'M') {
                 maven_mode = 1;
@@ -1304,6 +1716,20 @@ int main(int argc, char *argv[]) {
                 discrete_mode = 0;
                 crypto_mode = 0;
                 botnet_mode = 0;
+                matrix_mode = 0;
+                quit_counter = 0;
+            } else if (ch == 'x' || ch == 'X') {
+                matrix_mode = !matrix_mode;
+                if (matrix_mode) {
+                    botnet_mode = 0;
+                    crypto_mode = 0;
+                    windows_mode = 0;
+                    discrete_mode = 0;
+                    maven_mode = 0;
+                    initialize_matrix();
+                } else {
+                    clear(); /* flush any residual rain glyphs immediately */
+                }
                 quit_counter = 0;
             } else if (ch == 'b' || ch == 'B') {
                 botnet_mode = !botnet_mode;
